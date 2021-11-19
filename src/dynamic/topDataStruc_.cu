@@ -3,8 +3,8 @@
 
 #include <string>
 
-#include "adList.h"
-#include "adListShared.h"
+#include "adListCuda_.cu"
+// #include "adListShared.h"
 #include "stinger.h"
 #include "darhh.h"
 #include "adListChunked.h"

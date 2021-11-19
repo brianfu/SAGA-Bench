@@ -1,10 +1,10 @@
 # See LICENSE.txt for license details.
 
-C = g++
-CFLAGS = -O2 -Wall -Wextra -std=c++11 -fpermissive
+C = nvcc
+CFLAGS = -gencode arch=compute_50,code=sm_50 -Xcompiler -O2 -std=c++11 -w
 
-CXX = g++
-CXXFLAGS = -O2 -Wall -Wextra -pedantic -std=c++11 -fopenmp
+CXX = nvcc
+CXXFLAGS = -gencode arch=compute_50,code=sm_50 -Xcompiler -O2 -std=c++11 -w
 
 DYN_PREFIX := d_
 
@@ -14,13 +14,16 @@ OBJ_DIR := obj
 BIN_DIR := bin
 
 DYN_SRC := $(wildcard $(DYN_DIR)/*.cc)
+DYN_SRC += $(wildcard $(DYN_DIR)/*.cu)
 DYN_SRC += $(wildcard $(DYN_DIR)/*.c)
 DYN_SRC += $(wildcard $(UTL_DIR)/*.cc)
 DYN_HDR := $(wildcard $(DYN_DIR)/*.h)
+DYN_HDR += $(wildcard $(DYN_DIR)/*_.cu)
 DYN_HDR += $(wildcard $(UTL_DIR)/*.h)
 
 DYN_OBJ := $(addprefix $(OBJ_DIR)/$(DYN_PREFIX),$(notdir $(patsubst %.c,%.o,$(wildcard $(DYN_DIR)/*.c))))
 DYN_OBJ += $(addprefix $(OBJ_DIR)/$(DYN_PREFIX),$(notdir $(patsubst %.cc,%.o,$(wildcard $(DYN_DIR)/*.cc))))
+DYN_OBJ += $(addprefix $(OBJ_DIR)/$(DYN_PREFIX),$(notdir $(patsubst %.cu,%.o,$(filter-out *_.cu, $(wildcard $(DYN_DIR)/*.cu)))))
 
 .PHONY : all
 all : $(BIN_DIR)/errorExtractor frontEnd 
@@ -36,6 +39,10 @@ $(OBJ_DIR)/$(DYN_PREFIX)%.o : $(DYN_DIR)/%.cc $(DYN_HDR)
 
 $(OBJ_DIR)/$(DYN_PREFIX)%.o : $(DYN_DIR)/%.c $(DYN_HDR)
 	$(C) $(CFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/$(DYN_PREFIX)%.o : $(filter-out *_.cu, $(wildcard $(DYN_DIR)/*.cu)) $(DYN_HDR)
+	echo $(filter-out *_.cu, $(wildcard $(DYN_DIR)/*.cu))
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 .PHONY : clean
 

@@ -2,12 +2,14 @@
 #define TRAVERSAL_H_
 
 #include "types.h"
-#include "adListShared.h"
+// #include "adListShared.h"
 #include "stinger.h"
 #include "darhh.h"
 #include "adListChunked.h"
 
-#include "topDataStruc.h"
+#include "topDataStruc_.cu"
+
+#include <fstream>
 
 template <typename T>
 class neighborhood;
@@ -91,73 +93,73 @@ public:
     }
 };
 
-template <typename U>
-class neighborhood_iter<adListShared<U>> {    
-    friend class neighborhood<adListShared<U>>;
-private:      
-    adListShared<U>* ds;      
-    NodeID node;
-    bool in_neigh;
-    U* cursor;
-public:
-    neighborhood_iter(adListShared<U>* _ds, NodeID _n, bool _in_neigh): 
-	ds(_ds), node(_n), in_neigh(_in_neigh){        
-	if(in_neigh){        
-	    bool empty = ds->in_neighbors[node].empty(); 
-	    cursor = empty? 0 : &(ds->in_neighbors[node][0]);        
-	}
-	else{        
-	    bool empty = ds->out_neighbors[node].empty(); 
-	    cursor = empty? 0 : &(ds->out_neighbors[node][0]);
-	}
-    }
+// template <typename U>
+// class neighborhood_iter<adListShared<U>> {    
+//     friend class neighborhood<adListShared<U>>;
+// private:      
+//     adListShared<U>* ds;      
+//     NodeID node;
+//     bool in_neigh;
+//     U* cursor;
+// public:
+//     neighborhood_iter(adListShared<U>* _ds, NodeID _n, bool _in_neigh): 
+// 	ds(_ds), node(_n), in_neigh(_in_neigh){        
+// 	if(in_neigh){        
+// 	    bool empty = ds->in_neighbors[node].empty(); 
+// 	    cursor = empty? 0 : &(ds->in_neighbors[node][0]);        
+// 	}
+// 	else{        
+// 	    bool empty = ds->out_neighbors[node].empty(); 
+// 	    cursor = empty? 0 : &(ds->out_neighbors[node][0]);
+// 	}
+//     }
 
-    bool operator!=(const neighborhood_iter<adListShared<U>>& it){
-        return cursor != it.cursor;
-    }
+//     bool operator!=(const neighborhood_iter<adListShared<U>>& it){
+//         return cursor != it.cursor;
+//     }
 
-    neighborhood_iter& operator++(){
-        if(in_neigh){
-            int size_in_neigh = ds->in_neighbors[node].size();
-            if(cursor == &(ds->in_neighbors[node][size_in_neigh-1])){
-                cursor = nullptr; 
-            }
-            else cursor = cursor + 1;
-        }else{
-            int size_out_neigh = ds->out_neighbors[node].size();
-            if(cursor == &(ds->out_neighbors[node][size_out_neigh-1])){
-                cursor = nullptr;
-            }else cursor = cursor + 1;
-        }
+//     neighborhood_iter& operator++(){
+//         if(in_neigh){
+//             int size_in_neigh = ds->in_neighbors[node].size();
+//             if(cursor == &(ds->in_neighbors[node][size_in_neigh-1])){
+//                 cursor = nullptr; 
+//             }
+//             else cursor = cursor + 1;
+//         }else{
+//             int size_out_neigh = ds->out_neighbors[node].size();
+//             if(cursor == &(ds->out_neighbors[node][size_out_neigh-1])){
+//                 cursor = nullptr;
+//             }else cursor = cursor + 1;
+//         }
 
-        return *this;	      
-    }
+//         return *this;	      
+//     }
 
-    neighborhood_iter& operator++(int){
-         if(in_neigh){
-             int size_in_neigh = ds->in_neighbors[node].size();
-             if(cursor == &(ds->in_neighbors[node][size_in_neigh-1])){
-                 cursor = nullptr; 
-             }
-             else cursor = cursor + 1;
-         }else{
-             int size_out_neigh = ds->out_neighbors[node].size();
-             if(cursor == &(ds->out_neighbors[node][size_out_neigh-1])){
-                 cursor = nullptr;
-             }else cursor = cursor + 1;
-         }
+//     neighborhood_iter& operator++(int){
+//          if(in_neigh){
+//              int size_in_neigh = ds->in_neighbors[node].size();
+//              if(cursor == &(ds->in_neighbors[node][size_in_neigh-1])){
+//                  cursor = nullptr; 
+//              }
+//              else cursor = cursor + 1;
+//          }else{
+//              int size_out_neigh = ds->out_neighbors[node].size();
+//              if(cursor == &(ds->out_neighbors[node][size_out_neigh-1])){
+//                  cursor = nullptr;
+//              }else cursor = cursor + 1;
+//          }
 
-         return *this;		
-    }
+//          return *this;		
+//     }
 
-    NodeID operator*() {
-	return cursor->getNodeID();
-    }
+//     NodeID operator*() {
+// 	return cursor->getNodeID();
+//     }
 
-    Weight extractWeight(){
-	return cursor->getWeight();
-    }
-};
+//     Weight extractWeight(){
+// 	return cursor->getWeight();
+//     }
+// };
 
 //specialization for stinger
 

@@ -4,9 +4,9 @@
 #include <mutex>
 #include <thread>
 
-#include "builder.h"
+#include "builder.cu"
 #include "fileReader.h"
-#include "topDataStruc.h"
+#include "topDataStruc_.cu"
 #include "parser.h"
 
 /* Main thread that launches everything else */
