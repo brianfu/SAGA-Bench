@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include "adList_cu.h"
 #include "adList.h"
 #include "adListShared.h"
 #include "stinger.h"

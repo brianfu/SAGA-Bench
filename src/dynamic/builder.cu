@@ -3,8 +3,8 @@
 #include <iostream>
 #include <fstream>
 
-#include "topAlg.h"
-#include "topDataStruc.h"
+#include "topAlg_cu.h"
+#include "topDataStruc_cu.h"
 #include "../common/timer.h"
 
 void* dequeAndInsertEdge(
