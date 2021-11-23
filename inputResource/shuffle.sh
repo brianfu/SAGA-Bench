@@ -28,6 +28,6 @@ echo ""
 
 # Shuffle the contents of the edgelist and write them out to a file (with suffix .shuffle.txt)
 outputFileName="${inputFileName%.*}.shuffle.txt"
-cat ${inputFileName} | awk 'BEGIN{srand();}{print rand()"\t"$0}' | sort -k1 -g -T /home/abanti/sortDump/ | cut -f2- > ${outputFileName}
+cat ${inputFileName} | awk 'BEGIN{srand();}{print rand()"\t"$0}' | sort -k1 -g -T /home/eurocom/sortDump/ | cut -f2- > ${outputFileName}
 
 echo "SHUFFLING COMPLETE"

@@ -1,12 +1,12 @@
-#include "topDataStruc.h"
+#include "topDataStruc_cu.h"
 
 dataStruc* createDataStruc(const std::string& type, bool weighted, bool directed, int64_t num_nodes, int64_t num_threads)
 {        
     if (type == "adList") {
       if (weighted)
-	    return new adList<NodeWeight>(weighted, directed); 
+	    return new adList_cu<NodeWeight>(weighted, directed); 
       else
-	    return new adList<Node>(weighted, directed);
+	    return new adList_cu<Node>(weighted, directed);
     } else if (type == "adListShared") {       
       if (weighted)
 	    return new adListShared<NodeWeight>(weighted, directed, num_nodes); 
