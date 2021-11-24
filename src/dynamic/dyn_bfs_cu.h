@@ -1,6 +1,16 @@
 #ifndef DYN_BFS_H_
 #define DYN_BFS_H_
 
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
 #include <algorithm>
 
 #include <thrust/copy.h>
@@ -196,41 +206,55 @@ void BFSStartFromScratch(T* ds, NodeID source){
     t.Start(); 
 
     bool *frontierExists;
-    cudaMallocManaged((void**)&frontierExists, sizeof(bool));
+    gpuErrchk(cudaMallocManaged((void**)&frontierExists, sizeof(bool)));
 
-    ds->property_c.resize(ds->num_nodes);
-    ds->frontierArr_c.resize(ds->num_nodes);
-    thrust::fill(ds->property_c.begin(), ds->property_c.end(), -1);
-    thrust::fill(ds->frontierArr_c.begin(), ds->frontierArr_c.end(), false);
+    int PROPERTY_SIZE = ds->num_nodes * sizeof(float);
+    gpuErrchk(cudaMallocManaged((void**)&ds->property_c, PROPERTY_SIZE));
+    int FRONTIER_SIZE = ds->num_nodes * sizeof(bool);
+    gpuErrchk(cudaMallocManaged((void**)&ds->frontierArr_c, FRONTIER_SIZE));
+    thrust::fill(ds->property_c, ds->property_c + ds->num_nodes, -1);
+    thrust::fill(ds->frontierArr_c, ds->frontierArr_c + ds->num_nodes, false);
     ds->property_c[source] = 0;    
     ds->frontierArr_c[source] = true;
     *frontierExists = true;
 
     for(auto outNeighbor = ds->out_neighbors.begin(); outNeighbor != ds->out_neighbors.end(); outNeighbor++)
     {
-        ds->h_nodes.push_back(ds->h_out_neighbors.size());
+        if(ds->h_nodes.size() == 0)
+        {
+            ds->h_nodes.push_back(0);
+        }
+        else
+        {
+            int start = *(ds->h_nodes.end() - 1);
+            ds->h_nodes.push_back(start + (*outNeighbor).size());
+        }
         for(auto node = (*outNeighbor).begin(); node != (*outNeighbor).end(); node++)
         {
             ds->h_out_neighbors.push_back((*node).getNodeID());
         }
     }
-    ds->d_nodes.resize(ds->h_nodes.size());
-    ds->d_out_neighbors.resize(ds->h_out_neighbors.size());
-    ds->d_nodes = ds->h_nodes;
-    ds->d_out_neighbors = ds->h_out_neighbors;
+    int NODES_SIZE = ds->h_nodes.size() * sizeof(NodeID);
+    gpuErrchk(cudaMallocManaged((void**)&ds->d_nodes, NODES_SIZE));
+    thrust::copy(ds->h_nodes.begin(), ds->h_nodes.end(), ds->d_nodes);
+    int NEIGHBOURS_SIZE = ds->h_out_neighbors.size() * sizeof(NodeID);
+    gpuErrchk(cudaMallocManaged((void**)&ds->d_out_neighbors, NEIGHBOURS_SIZE));
+    std::cout << "Neighbour size: " << ds->h_out_neighbors.size() << std::endl;
+    thrust::copy(ds->h_out_neighbors.begin(), ds->h_out_neighbors.end(), ds->d_out_neighbors);
 
     dim3 BLK_SIZE(512);
     dim3 gridSize(ds->num_nodes / 512);
-    NodeID *d_nodes =  thrust::raw_pointer_cast(&ds->d_nodes[0]);
-    NodeID *d_out_neighbors =  thrust::raw_pointer_cast(&ds->d_out_neighbors[0]);
-    bool *d_frontierArr =  thrust::raw_pointer_cast(&ds->frontierArr_c[0]);
-    float *d_property = thrust::raw_pointer_cast(&ds->property_c[0]);
+    // NodeID *d_nodes =  thrust::raw_pointer_cast(&ds->d_nodes[0]);
+    // NodeID *d_out_neighbors =  thrust::raw_pointer_cast(&ds->d_out_neighbors[0]);
+    // bool *d_frontierArr =  thrust::raw_pointer_cast(&ds->frontierArr_c[0]);
+    // float *d_property = thrust::raw_pointer_cast(&ds->property_c[0]);
     while(*frontierExists){       
         //std::cout << "Queue not empty, Queue size: " << queue.size() << std::endl;
         *frontierExists = false;
-        bfs_kerenel<<<gridSize, BLK_SIZE>>>(d_nodes, d_out_neighbors, d_frontierArr, d_property, frontierExists, ds->num_nodes, ds->num_edges);
+        bfs_kerenel<<<gridSize, BLK_SIZE>>>(ds->d_nodes, ds->d_out_neighbors, ds->frontierArr_c, ds->property_c, frontierExists, ds->num_nodes, ds->num_edges);
         cudaDeviceSynchronize();
     }
+    std::cout << "Exiting kernel" << std::endl;
 
     t.Stop();    
     ofstream out("Alg.csv", std::ios_base::app);   

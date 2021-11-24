@@ -19,14 +19,14 @@ class adList_cu: public dataStruc {
       void updateForExistingVertex(const Edge& e, bool source);        
       
     public: 
-      thrust::device_vector<float> property_c; 
-      thrust::device_vector<bool> frontierArr_c;
+      float* property_c; 
+      bool* frontierArr_c;
       thrust::host_vector<NodeID> h_nodes;
-      thrust::device_vector<NodeID> d_nodes;
+      NodeID* d_nodes;
       thrust::host_vector<NodeID> h_out_neighbors;
-      thrust::device_vector<NodeID> d_out_neighbors;
+      NodeID* d_out_neighbors;
       thrust::host_vector<NodeID> h_in_neighbors;
-      thrust::device_vector<NodeID> d_in_neighbors;
+      NodeID* d_in_neighbors;
       std::vector<std::vector<T>> out_neighbors;
       std::vector<std::vector<T>> in_neighbors;  
       adList_cu(bool w, bool d);    
