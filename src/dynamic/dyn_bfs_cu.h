@@ -212,12 +212,16 @@ void BFSStartFromScratch(T* ds, NodeID source){
     gpuErrchk(cudaMallocManaged((void**)&ds->property_c, PROPERTY_SIZE));
     int FRONTIER_SIZE = ds->num_nodes * sizeof(bool);
     gpuErrchk(cudaMallocManaged((void**)&ds->frontierArr_c, FRONTIER_SIZE));
+    // memset(ds->property_c, -1, PROPERTY_SIZE);
+    // memset(ds->frontierArr_c, false, FRONTIER_SIZE);
     thrust::fill(ds->property_c, ds->property_c + ds->num_nodes, -1);
     thrust::fill(ds->frontierArr_c, ds->frontierArr_c + ds->num_nodes, false);
     ds->property_c[source] = 0;    
     ds->frontierArr_c[source] = true;
     *frontierExists = true;
 
+    ds->h_nodes.resize(0);
+    ds->h_out_neighbors.resize(0);
     for(auto outNeighbor = ds->out_neighbors.begin(); outNeighbor != ds->out_neighbors.end(); outNeighbor++)
     {
         if(ds->h_nodes.size() == 0)
@@ -226,8 +230,8 @@ void BFSStartFromScratch(T* ds, NodeID source){
         }
         else
         {
-            int start = *(ds->h_nodes.end() - 1);
-            ds->h_nodes.push_back(start + (*outNeighbor).size());
+            int start = *(ds->h_nodes.end() - 1) + (*(outNeighbor-1)).size();
+            ds->h_nodes.push_back(start);
         }
         for(auto node = (*outNeighbor).begin(); node != (*outNeighbor).end(); node++)
         {
@@ -236,11 +240,11 @@ void BFSStartFromScratch(T* ds, NodeID source){
     }
     int NODES_SIZE = ds->h_nodes.size() * sizeof(NodeID);
     gpuErrchk(cudaMallocManaged((void**)&ds->d_nodes, NODES_SIZE));
-    thrust::copy(ds->h_nodes.begin(), ds->h_nodes.end(), ds->d_nodes);
+    std::copy(ds->h_nodes.begin(), ds->h_nodes.end(), ds->d_nodes);
     int NEIGHBOURS_SIZE = ds->h_out_neighbors.size() * sizeof(NodeID);
     gpuErrchk(cudaMallocManaged((void**)&ds->d_out_neighbors, NEIGHBOURS_SIZE));
     std::cout << "Neighbour size: " << ds->h_out_neighbors.size() << std::endl;
-    thrust::copy(ds->h_out_neighbors.begin(), ds->h_out_neighbors.end(), ds->d_out_neighbors);
+    std::copy(ds->h_out_neighbors.begin(), ds->h_out_neighbors.end(), ds->d_out_neighbors);
 
     dim3 BLK_SIZE(512);
     dim3 gridSize(ds->num_nodes / 512);
@@ -255,10 +259,14 @@ void BFSStartFromScratch(T* ds, NodeID source){
         cudaDeviceSynchronize();
     }
     std::cout << "Exiting kernel" << std::endl;
-
+    
     t.Stop();    
     ofstream out("Alg.csv", std::ios_base::app);   
     out << t.Seconds() << std::endl;    
     out.close();
+
+    std::copy(ds->property_c, ds->property_c + ds->num_nodes, ds->property.begin());
+    cudaFree(ds->property_c);
+    cudaFree(ds->frontierArr_c);
 }
 #endif  // DYN_BFS_H_    
