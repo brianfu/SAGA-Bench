@@ -195,8 +195,9 @@ public:
 			//     return dynMCAlg(ds8); 
 		} else if (alg == "bfsfromscratch") {
 	    	if (source == -1) {
-				DynamicSourcePicker sp(ds);
-				source = sp.PickNext(); 
+				// DynamicSourcePicker sp(ds);
+				// source = sp.PickNext(); 
+				source = 0;
 				std::cout << "Source in top: " << source << std::endl;
 			if(source == -1)
 		    	return;
