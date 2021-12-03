@@ -36,6 +36,15 @@ void* dequeAndInsertEdge(
 	    std::cout << "Updated Batch: " << batch << std::endl;
 	    batch++;
 	    alg.performAlg();
+
+		ofstream myfile;
+		myfile.open("/home/eurocom/dataset/cudaBfsFromScratch" + std::to_string(batch) + ".csv");
+		for (int i=0; i < ds->property.size(); i++)
+		{
+			myfile << i << ", " << ds->property[i] << "\n";
+			
+		}
+		myfile.close();
 	} else {		
 	    q_lock->unlock();		
 	    std::this_thread::sleep_for(std::chrono::milliseconds(1));		
