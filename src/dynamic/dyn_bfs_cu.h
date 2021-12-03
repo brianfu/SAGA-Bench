@@ -173,7 +173,7 @@ void dynBFSAlg(T* ds, NodeID source){
 
 __global__ void bfs_kerenel(NodeID *nodes, NodeID *d_out_neighbors, bool *frontierArr, float *property, bool* frontierExists, int64_t numNodes, int64_t numEdges)
 {
-    int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
     if (idx < numNodes)
     {
         if(frontierArr[idx])
@@ -206,11 +206,11 @@ void BFSStartFromScratch(T* ds, NodeID source){
     t.Start(); 
 
     bool *frontierExists;
-    gpuErrchk(cudaMallocManaged((void**)&frontierExists, sizeof(bool)));
+    gpuErrchk(cudaMallocManaged((void**)&frontierExists, sizeof(*frontierExists)));
 
-    int PROPERTY_SIZE = ds->num_nodes * sizeof(float);
+    int PROPERTY_SIZE = ds->num_nodes * sizeof(*ds->property_c);
     gpuErrchk(cudaMallocManaged((void**)&ds->property_c, PROPERTY_SIZE));
-    int FRONTIER_SIZE = ds->num_nodes * sizeof(bool);
+    int FRONTIER_SIZE = ds->num_nodes * sizeof(*ds->frontierArr_c);
     gpuErrchk(cudaMallocManaged((void**)&ds->frontierArr_c, FRONTIER_SIZE));
     // memset(ds->property_c, -1, PROPERTY_SIZE);
     // memset(ds->frontierArr_c, false, FRONTIER_SIZE);
@@ -240,11 +240,12 @@ void BFSStartFromScratch(T* ds, NodeID source){
     }
     int NODES_SIZE = ds->h_nodes.size() * sizeof(NodeID);
     gpuErrchk(cudaMallocManaged((void**)&ds->d_nodes, NODES_SIZE));
-    std::copy(ds->h_nodes.begin(), ds->h_nodes.end(), ds->d_nodes);
+    thrust::copy(ds->h_nodes.begin(), ds->h_nodes.end(), ds->d_nodes);
+
     int NEIGHBOURS_SIZE = ds->h_out_neighbors.size() * sizeof(NodeID);
     gpuErrchk(cudaMallocManaged((void**)&ds->d_out_neighbors, NEIGHBOURS_SIZE));
     std::cout << "Neighbour size: " << ds->h_out_neighbors.size() << std::endl;
-    std::copy(ds->h_out_neighbors.begin(), ds->h_out_neighbors.end(), ds->d_out_neighbors);
+    thrust::copy(ds->h_out_neighbors.begin(), ds->h_out_neighbors.end(), ds->d_out_neighbors);
 
     dim3 BLK_SIZE(512);
     dim3 gridSize(ds->num_nodes / 512);
