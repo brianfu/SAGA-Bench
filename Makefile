@@ -1,10 +1,10 @@
 # See LICENSE.txt for license details.
 
 C = nvcc
-CFLAGS = -gencode arch=compute_50,code=sm_50 -Xcompiler -O2 -std=c++11 -w
+CFLAGS = -gencode arch=compute_75,code=sm_75 -Xcompiler -O2 -std=c++11 -w
 
 CXX = nvcc
-CXXFLAGS = -gencode arch=compute_50,code=sm_50 -Xcompiler -fopenmp -O2 -std=c++11 -w
+CXXFLAGS = -gencode arch=compute_75,code=sm_75 -Xcompiler -fopenmp -O2 -std=c++11 -w
 
 DYN_PREFIX := d_
 
