@@ -247,8 +247,9 @@ void BFSStartFromScratch(T* ds, NodeID source){
     // std::cout << "Neighbour size: " << ds->h_out_neighbors.size() << std::endl;
     std::copy(ds->h_out_neighbors.begin(), ds->h_out_neighbors.end(), ds->d_out_neighbors);
 
-    dim3 BLK_SIZE(512);
-    dim3 gridSize(ds->num_nodes / 512);
+    const int BLK_SIZE = 512;
+    dim3 blkSize(BLK_SIZE);
+    dim3 gridSize((ds->num_nodes + BLK_SIZE - 1) / BLK_SIZE);
     // NodeID *d_nodes =  thrust::raw_pointer_cast(&ds->d_nodes[0]);
     // NodeID *d_out_neighbors =  thrust::raw_pointer_cast(&ds->d_out_neighbors[0]);
     // bool *d_frontierArr =  thrust::raw_pointer_cast(&ds->frontierArr_c[0]);
@@ -256,7 +257,7 @@ void BFSStartFromScratch(T* ds, NodeID source){
     while(*frontierExists){       
         //std::cout << "Queue not empty, Queue size: " << queue.size() << std::endl;
         *frontierExists = false;
-        bfs_kerenel<<<gridSize, BLK_SIZE>>>(ds->d_nodes, ds->d_out_neighbors, ds->frontierArr_c, ds->property_c, frontierExists, ds->num_nodes, ds->num_edges);
+        bfs_kerenel<<<gridSize, blkSize>>>(ds->d_nodes, ds->d_out_neighbors, ds->frontierArr_c, ds->property_c, frontierExists, ds->num_nodes, ds->num_edges);
         cudaDeviceSynchronize();
     }
     std::cout << "Exiting kernel" << std::endl;
