@@ -171,27 +171,61 @@ void dynBFSAlg(T* ds, NodeID source){
 
 #endif
 
-__global__ void bfs_kerenel(NodeID *nodes, NodeID *d_out_neighbors, bool *frontierArr, int *property, bool* frontierExists, int64_t numNodes, int64_t numEdges)
+// From https://stackoverflow.com/questions/62091548/atomiccas-for-bool-implementation
+static __inline__ __device__ bool atomic_CAS(bool *address, bool compare, bool val)
+{
+    unsigned long long addr = (unsigned long long)address;
+    unsigned pos = addr & 3;  // byte position within the int
+    int *int_addr = (int *)(addr - pos);  // int-aligned address
+    int old = *int_addr, assumed, ival;
+
+    bool current_value;
+
+    do
+    {
+        current_value = (bool)(old & ((0xFFU) << (8 * pos)));
+
+        if(current_value != compare) // If we expected that bool to be different, then
+            break; // stop trying to update it and just return it's current value
+
+        assumed = old;
+        if(val)
+            ival = old | (1 << (8 * pos));
+        else
+            ival = old & (~((0xFFU) << (8 * pos)));
+        old = atomicCAS(int_addr, assumed, ival);
+    } while(assumed != old);
+
+    return current_value;
+}
+
+void swap(bool* &a, bool* &b){
+  bool *temp = a;
+  a = b;
+  b = temp;
+}
+
+__global__ void bfs_kerenel(NodeID *nodes, NodeID *d_out_neighbors, bool *frontierArr, bool *newFrontierArr, int *property, bool* frontierExists, int64_t numNodes, int64_t numEdges, int level)
 {
     int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
     if (idx < numNodes)
     {
         if(frontierArr[idx])
         {
-            frontierArr[idx] = false;
             int iEnd = (idx + 1) < numNodes ? nodes[idx+1] : numEdges;
             for(int i = nodes[idx]; i < iEnd; i++)
             {
-                if (property[d_out_neighbors[i]] < 0)
+                if (property[d_out_neighbors[i]] == -1)
                 {
-                    atomicCAS(&property[d_out_neighbors[i]], -1, property[idx] + 1);
-                    frontierArr[d_out_neighbors[i]] = true;
+                    atomicCAS(&property[d_out_neighbors[i]], -1, level);
+                    atomic_CAS(&newFrontierArr[d_out_neighbors[i]], false, true);
                     if(!(*frontierExists))
                     {
-                        atomicCAS((int *)frontierExists, (int) false, (int) true);
+                        atomic_CAS(frontierExists, false, true);
                     }
                 }
             }
+            frontierArr[idx] = false;
         }
     }
 }
@@ -225,6 +259,11 @@ void BFSStartFromScratch(T* ds, NodeID source){
     std::fill(frontierArr_h, frontierArr_h + ds->num_nodes, false);
     frontierArr_h[source] = true;
     cudaMemcpy(ds->frontierArr_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
+    frontierArr_h[source] = false;
+
+    bool* newFrontierArr_c;
+    gpuErrchk(cudaMalloc((void**)&newFrontierArr_c, FRONTIER_SIZE));
+    cudaMemcpy(newFrontierArr_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
 
     int NODES_SIZE = ds->num_nodes * sizeof(NodeID);
     int NEIGHBOURS_SIZE = ds->num_edges * sizeof(NodeID);
@@ -270,12 +309,16 @@ void BFSStartFromScratch(T* ds, NodeID source){
     // NodeID *d_out_neighbors =  thrust::raw_pointer_cast(&ds->d_out_neighbors[0]);
     // bool *d_frontierArr =  thrust::raw_pointer_cast(&ds->frontierArr_c[0]);
     // float *d_property = thrust::raw_pointer_cast(&ds->property_c[0]);
+    int level = 1;
     while(h_frontierExists){       
         //std::cout << "Queue not empty, Queue size: " << queue.size() << std::endl;
         h_frontierExists = false;
         cudaMemcpy(d_frontierExists, &h_frontierExists, sizeof(bool), cudaMemcpyHostToDevice);
-        bfs_kerenel<<<gridSize, blkSize>>>(ds->d_nodes, ds->d_out_neighbors, ds->frontierArr_c, ds->property_c, d_frontierExists, ds->num_nodes, ds->num_edges);
+        bfs_kerenel<<<gridSize, blkSize>>>(ds->d_nodes, ds->d_out_neighbors, ds->frontierArr_c, newFrontierArr_c, ds->property_c, d_frontierExists, ds->num_nodes, ds->num_edges, level);
         cudaDeviceSynchronize();
+        swap(ds->frontierArr_c, newFrontierArr_c);
+        cudaMemcpy(newFrontierArr_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
+        level++;
         cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost);
     }
     std::cout << "Exiting kernel" << std::endl;
@@ -291,6 +334,7 @@ void BFSStartFromScratch(T* ds, NodeID source){
     cudaFree(d_frontierExists);
     cudaFree(ds->property_c);
     cudaFree(ds->frontierArr_c);
+    cudaFree(newFrontierArr_c);
     cudaFree(ds->d_nodes);
     cudaFree(ds->d_out_neighbors);
 
