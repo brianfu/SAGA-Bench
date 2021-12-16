@@ -37,14 +37,17 @@ void* dequeAndInsertEdge(
 	    batch++;
 	    alg.performAlg();
 
-		ofstream myfile;
-		myfile.open("/home/eurocom/dataset/cudaBfsFromScratch" + std::to_string(batch) + ".csv");
-		for (int i=0; i < ds->property.size(); i++)
+		if(ds->num_edges == 234370166)
 		{
-			myfile << i << ", " << ds->property[i] << "\n";
-			
+			ofstream myfile;
+			myfile.open("/home/tmathew/sfuhome/dataset/cudaBfsFromScratch" + std::to_string(batch) + ".csv");
+			for (int i=0; i < ds->property.size(); i++)
+			{
+				myfile << i << ", " << ds->property[i] << "\n";
+				
+			}
+			myfile.close();
 		}
-		myfile.close();
 	} else {		
 	    q_lock->unlock();		
 	    std::this_thread::sleep_for(std::chrono::milliseconds(1));		
