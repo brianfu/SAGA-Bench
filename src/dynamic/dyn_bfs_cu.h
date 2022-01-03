@@ -26,151 +26,6 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 
 #include "adList_cu.h"
 
-/* Algorithm: Incremental BFS and BFS starting from scratch */
-
-#if 0
-template<typename T> 
-void BFSIter0(T* ds, SlidingQueue<NodeID>& queue){  
-    pvector<bool> visited(ds->num_nodes, false);     
-  
-    #pragma omp parallel     
-    {
-        QueueBuffer<NodeID> lqueue(queue);
-        #pragma omp for schedule(dynamic, 64)
-        for(NodeID n=0; n < ds->num_nodes; n++){
-            if(ds->affected[n]){
-                float old_depth = ds->property[n];
-                float new_depth = std::numeric_limits<float>::max();
-
-                // pull new depth from incoming neighbors
-                for(auto v: in_neigh(n, ds)){
-                    if (ds->property[v] != -1) {
-                        new_depth = std::min(new_depth, ds->property[v] + 1);
-                    }
-                }                                         
-                
-                // trigger happens if it is:
-                // 1) brand new vertex with old_prop = -1 and we found a new valid min depth 
-                // 2) already existing vertex and we found a new depth smaller than old depth 
-                bool trigger = (
-                ((new_depth < old_depth) || (old_depth == -1)) 
-                && (new_depth != std::numeric_limits<float>::max())                 
-                );               
-
-                /*if(trigger){                                                 
-                    ds->property[n] = new_depth; 
-                    for(auto v: out_neigh(n, dataStruc, ds, directed)){
-                        float curr_depth = ds->property[v];
-                        float updated_depth = ds->property[n] + 1;                        
-                        if((updated_depth < curr_depth) || (curr_depth == -1)){   
-                            if(compare_and_swap(ds->property[v], curr_depth, updated_depth)){                                                              
-                                lqueue.push_back(v); 
-                            }
-                        }
-                    }
-                }*/
-
-                // Note: above is commented and included this new thing. 
-                // Above was leading to vertices being queued redundantly
-                // Above assumes updated_depth < curr_depth only once. 
-                // This is not true in dynamic case because we start from affected vertices
-                // whose depths are not all necessary the same.
-                // In static version, the above works because static version starts from the source 
-                // and we know that updated_depth < curr_depth only once. 
-
-                if(trigger){
-                    ds->property[n] = new_depth; 
-                    for(auto v: out_neigh(n, ds)){
-                        float curr_depth = ds->property[v];
-                        float updated_depth = ds->property[n] + 1;
-                        if((updated_depth < curr_depth) || (curr_depth == -1)){
-                            bool curr_val = visited[v];
-                            if(!curr_val){
-                                if(compare_and_swap(visited[v], curr_val, true))
-                                    lqueue.push_back(v);
-                            }
-                            while(!compare_and_swap(ds->property[v], curr_depth, updated_depth)){
-                                curr_depth = ds->property[v];
-                                if(curr_depth <= updated_depth){
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        lqueue.flush();
-    }   
-}
-
-template<typename T>
-void dynBFSAlg(T* ds, NodeID source){
-    std::cout <<"Running dynamic BFS " << std::endl;
-    
-    Timer t;
-    t.Start();
-    
-    SlidingQueue<NodeID> queue(ds->num_nodes);         
-    if(ds->property[source] == -1) ds->property[source] = 0;
-    
-    BFSIter0(ds, queue);
-    queue.slide_window();   
-    
-    while(!queue.empty()){             
-        //std::cout << "Queue not empty, Queue size: " << queue.size() << std::endl;
-        pvector<bool> visited(ds->num_nodes, false); 
-
-        #pragma omp parallel
-        {
-            QueueBuffer<NodeID> lqueue(queue);
-            #pragma omp for schedule(dynamic, 64)
-            for (auto q_iter = queue.begin(); q_iter < queue.end(); q_iter++){
-                NodeID n = *q_iter;                        
-                for(auto v: out_neigh(n, ds)){
-                    float curr_depth = ds->property[v];
-                    float new_depth = ds->property[n] + 1;
-                    /*if((new_depth < curr_depth) || (curr_depth == -1)){
-                        if(compare_and_swap(ds->property[v], curr_depth, new_depth)){                            
-                            lqueue.push_back(v);
-                        }
-                    }*/
-
-                    if((new_depth < curr_depth) || (curr_depth == -1)){
-                        bool curr_val = visited[v];
-                        if(!curr_val){
-                            if(compare_and_swap(visited[v], curr_val, true))
-                                    lqueue.push_back(v);
-                        }
-
-                        while(!compare_and_swap(ds->property[v], curr_depth, new_depth)){
-                            curr_depth = ds->property[v];
-                            if(curr_depth <= new_depth){
-                                break;
-                            }
-                        }
-                    }               
-                }
-            }
-            lqueue.flush();
-        }
-        queue.slide_window();               
-    }    
-
-    // clear affected array to get ready for the next update round
-    #pragma omp parallel for schedule(dynamic, 64)
-    for(NodeID i = 0; i < ds->num_nodes; i++){
-        ds->affected[i] = false;
-    }
-
-    t.Stop();    
-    ofstream out("Alg.csv", std::ios_base::app);   
-    out << t.Seconds() << std::endl;    
-    out.close();
-} 
-
-#endif
-
 // From https://stackoverflow.com/questions/62091548/atomiccas-for-bool-implementation
 static __inline__ __device__ bool atomic_CAS(bool *address, bool compare, bool val)
 {
@@ -198,6 +53,306 @@ static __inline__ __device__ bool atomic_CAS(bool *address, bool compare, bool v
 
     return current_value;
 }
+
+/* Algorithm: Incremental BFS and BFS starting from scratch */
+__global__ void BFSIter0_cuda(bool* affected, int* property, NodeID* d_InNodes, NodeID* d_in_neighbors,
+                    NodeID* d_nodes, NodeID* d_out_neighbors, bool* visited, int numNodes, int numEdges,
+                    bool* frontierArr, bool* frontierExists) {
+    int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
+    const int MAX = 2147483600;
+    if (idx < numNodes)
+    {
+        if(affected[idx]){
+            int old_depth = property[idx];
+            int newDepth = MAX;
+            int iEnd = (idx + 1) < numNodes ? d_InNodes[idx+1] : numEdges;
+            for(int i = d_InNodes[idx]; i < iEnd; i++)
+            {
+                if (property[d_in_neighbors[i]] != -1)
+                {
+                    newDepth = newDepth <  (property[idx] + 1) ? newDepth : (property[idx] + 1);
+                }
+            }
+
+            bool trigger = (
+                ((newDepth < old_depth) || (old_depth == -1)) 
+                && (newDepth != MAX));
+
+            if(trigger){
+                if(!(*frontierExists))
+                {
+                    atomic_CAS(frontierExists, false, true);
+                }
+                property[idx] = newDepth;
+                iEnd = (idx + 1) < numNodes ? d_nodes[idx+1] : numEdges;
+                for(int i = d_nodes[idx]; i < iEnd; i++)
+                {
+                    NodeID v = d_out_neighbors[i]; 
+                    int curr_depth = property[v];
+                    int updated_depth = property[idx] + 1;
+                    if((updated_depth < curr_depth) || (curr_depth == -1)){
+                        bool curr_val = visited[v];
+                        if(!curr_val){
+                            if(atomic_CAS(&visited[v], curr_val, true))
+                                atomic_CAS(&frontierArr[v], false, true);
+                        }
+                        while(!atomicCAS(&property[v], curr_depth, updated_depth)){
+                            curr_depth = property[v];
+                            if(curr_depth <= updated_depth){
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// template<typename T> 
+// void BFSIter0(T* ds, SlidingQueue<NodeID>& queue){  
+//     pvector<bool> visited(ds->num_nodes, false);     
+  
+//     #pragma omp parallel     
+//     {
+//         QueueBuffer<NodeID> lqueue(queue);
+//         #pragma omp for schedule(dynamic, 64)
+//         for(NodeID n=0; n < ds->num_nodes; n++){
+//             if(ds->affected[n]){
+//                 float old_depth = ds->property[n];
+//                 float new_depth = std::numeric_limits<float>::max();
+
+//                 // pull new depth from incoming neighbors
+//                 for(auto v: in_neigh(n, ds)){
+//                     if (ds->property[v] != -1) {
+//                         new_depth = std::min(new_depth, ds->property[v] + 1);
+//                     }
+//                 }                                         
+                
+//                 // trigger happens if it is:
+//                 // 1) brand new vertex with old_prop = -1 and we found a new valid min depth 
+//                 // 2) already existing vertex and we found a new depth smaller than old depth 
+//                 bool trigger = (
+//                 ((new_depth < old_depth) || (old_depth == -1)) 
+//                 && (new_depth != std::numeric_limits<float>::max())                 
+//                 );               
+
+//                 /*if(trigger){                                                 
+//                     ds->property[n] = new_depth; 
+//                     for(auto v: out_neigh(n, dataStruc, ds, directed)){
+//                         float curr_depth = ds->property[v];
+//                         float updated_depth = ds->property[n] + 1;                        
+//                         if((updated_depth < curr_depth) || (curr_depth == -1)){   
+//                             if(compare_and_swap(ds->property[v], curr_depth, updated_depth)){                                                              
+//                                 lqueue.push_back(v); 
+//                             }
+//                         }
+//                     }
+//                 }*/
+
+//                 // Note: above is commented and included this new thing. 
+//                 // Above was leading to vertices being queued redundantly
+//                 // Above assumes updated_depth < curr_depth only once. 
+//                 // This is not true in dynamic case because we start from affected vertices
+//                 // whose depths are not all necessary the same.
+//                 // In static version, the above works because static version starts from the source 
+//                 // and we know that updated_depth < curr_depth only once. 
+
+//                 if(trigger){
+//                     ds->property[n] = new_depth; 
+//                     for(auto v: out_neigh(n, ds)){
+//                         float curr_depth = ds->property[v];
+//                         float updated_depth = ds->property[n] + 1;
+//                         if((updated_depth < curr_depth) || (curr_depth == -1)){
+//                             bool curr_val = visited[v];
+//                             if(!curr_val){
+//                                 if(compare_and_swap(visited[v], curr_val, true))
+//                                     lqueue.push_back(v);
+//                             }
+//                             while(!compare_and_swap(ds->property[v], curr_depth, updated_depth)){
+//                                 curr_depth = ds->property[v];
+//                                 if(curr_depth <= updated_depth){
+//                                     break;
+//                                 }
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//         lqueue.flush();
+//     }   
+// }
+
+__global__ void dynBfs_kerenel(int* property, NodeID* d_nodes, NodeID* d_out_neighbors,
+                    bool* visited_c, int num_nodes, int num_edges,
+                    bool* frontierArr_c, bool *newFrontierArr, bool* frontierExists){
+    int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
+    if(idx < num_nodes){
+        if(frontierArr_c[idx]){
+            int iEnd = (idx + 1) < num_nodes ? d_nodes[idx+1] : num_edges;
+            for(int i = d_nodes[idx]; i < iEnd; i++)
+            {
+                NodeID v = d_out_neighbors[i]; 
+                int curr_depth = property[v];
+                int updated_depth = property[idx] + 1;
+                if((updated_depth < curr_depth) || (curr_depth == -1)){
+                    bool curr_val = visited_c[v];
+                    if(!(*frontierExists))
+                    {
+                        atomic_CAS(frontierExists, false, true);
+                    }
+                    if(!curr_val){
+                        if(atomic_CAS(&visited_c[v], curr_val, true))
+                            atomic_CAS(&newFrontierArr[v], false, true);
+                    }
+                    while(!atomicCAS(&property[v], curr_depth, updated_depth)){
+                        curr_depth = property[v];
+                        if(curr_depth <= updated_depth){
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+template<typename T>
+void dynBFSAlg(T* ds, NodeID source){
+    std::cout <<"Running dynamic BFS " << std::endl;
+    
+    Timer t;
+    t.Start();
+    
+    bool *d_frontierExists;
+    gpuErrchk(cudaMalloc(&d_frontierExists, sizeof(bool)));
+    bool h_frontierExists = false;
+    cudaMemcpy(d_frontierExists, &h_frontierExists, sizeof(bool), cudaMemcpyHostToDevice);
+
+    int PROPERTY_SIZE = ds->num_nodes * sizeof(*ds->property_c);
+    gpuErrchk(cudaMalloc(&ds->property_c, PROPERTY_SIZE));
+    int *property_h;
+    property_h = (int *)malloc(PROPERTY_SIZE);
+    std::copy(ds->property.begin(), ds->property.end(), property_h);
+    if(property_h[source] == -1) property_h[source] = 0;
+    cudaMemcpy(ds->property_c, property_h, PROPERTY_SIZE, cudaMemcpyHostToDevice);
+
+    int FRONTIER_SIZE = ds->num_nodes * sizeof(*ds->frontierArr_c);
+    gpuErrchk(cudaMalloc((void**)&ds->frontierArr_c, FRONTIER_SIZE));
+    bool *frontierArr_h;
+    frontierArr_h = (bool *)malloc(FRONTIER_SIZE);
+    std::fill(frontierArr_h, frontierArr_h + ds->num_nodes, false);
+    // frontierArr_h[source] = true;
+    cudaMemcpy(ds->frontierArr_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
+    // frontierArr_h[source] = false;
+
+    bool* newFrontierArr_c;
+    gpuErrchk(cudaMalloc((void**)&newFrontierArr_c, FRONTIER_SIZE));
+    cudaMemcpy(newFrontierArr_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
+
+    bool* visited_c;
+    gpuErrchk(cudaMalloc((void**)&visited_c, FRONTIER_SIZE));
+    cudaMemcpy(visited_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
+
+    gpuErrchk(cudaMalloc((void**)&ds->affected_c, FRONTIER_SIZE));
+    cudaMemcpy(ds->affected_c, ds->affected.begin(), FRONTIER_SIZE, cudaMemcpyHostToDevice);
+
+    int NODES_SIZE = ds->num_nodes * sizeof(NodeID);
+    int NEIGHBOURS_SIZE = ds->num_edges * sizeof(NodeID);
+
+    ds->h_nodes = (NodeID *)malloc(NODES_SIZE);
+    ds->h_InNodes = (NodeID *)malloc(NODES_SIZE);
+    ds->h_out_neighbors = (NodeID *)malloc(NEIGHBOURS_SIZE);
+    ds->h_in_neighbors = (NodeID *)malloc(NEIGHBOURS_SIZE);
+    int neighborPosition = 0;
+    int currentNode = 0;
+    for(auto outNeighbor = ds->out_neighbors.begin(); outNeighbor != ds->out_neighbors.end(); outNeighbor++)
+    {
+        ds->h_nodes[currentNode] = neighborPosition;
+        currentNode++;
+        
+        for(auto node = (*outNeighbor).begin(); node != (*outNeighbor).end(); node++)
+        {
+            ds->h_out_neighbors[neighborPosition] = (*node).getNodeID();
+            neighborPosition++;
+        }
+    }
+
+    neighborPosition = 0;
+    currentNode = 0;
+    
+    for(auto inNeighbor = ds->in_neighbors.begin(); inNeighbor != ds->in_neighbors.end(); inNeighbor++)
+    {
+        ds->h_InNodes[currentNode] = neighborPosition;
+        currentNode++;
+        
+        for(auto node = (*inNeighbor).begin(); node != (*inNeighbor).end(); node++)
+        {
+            ds->h_in_neighbors[neighborPosition] = (*node).getNodeID();
+            neighborPosition++;
+        }
+    }
+
+    // if(ds->property[source] == -1) ds->property[source] = 0;
+
+    const int BLK_SIZE = 512;
+    dim3 blkSize(BLK_SIZE);
+    dim3 gridSize((ds->num_nodes + BLK_SIZE - 1) / BLK_SIZE);
+
+    BFSIter0_cuda<<<gridSize, blkSize>>>(ds->affected_c, ds->property_c, ds->d_InNodes, ds->d_in_neighbors,
+                ds->d_nodes, ds->d_out_neighbors, visited_c, ds->num_nodes, ds->num_edges,
+                ds->frontierArr_c, d_frontierExists);
+    
+    cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost);
+    
+    while(h_frontierExists){        
+        h_frontierExists = false;     
+        //std::cout << "Queue not empty, Queue size: " << queue.size() << std::endl;
+        cudaMemcpy(visited_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_frontierExists, &h_frontierExists, sizeof(bool), cudaMemcpyHostToDevice);
+        dynBfs_kerenel<<<gridSize, blkSize>>>(ds->property_c, ds->d_nodes, ds->d_out_neighbors,
+                    visited_c, ds->num_nodes, ds->num_edges,
+                    ds->frontierArr_c, newFrontierArr_c, d_frontierExists);
+
+        cudaDeviceSynchronize();
+        swap(ds->frontierArr_c, newFrontierArr_c);
+        cudaMemcpy(newFrontierArr_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
+        cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost);        
+    }    
+
+    cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost);
+    std::copy(property_h, property_h + ds->num_nodes, ds->property.begin());
+    
+    cudaFree(d_frontierExists);
+    cudaFree(ds->property_c);
+    cudaFree(ds->frontierArr_c);
+    cudaFree(newFrontierArr_c);
+    cudaFree(ds->d_nodes);
+    cudaFree(ds->d_out_neighbors);
+    cudaFree(ds->d_InNodes);
+    cudaFree(ds->d_in_neighbors);
+    cudaFree(ds->affected_c);
+    cudaFree(visited_c);
+
+    free(property_h);
+    free(frontierArr_h);
+    free(ds->h_nodes);
+    free(ds->h_out_neighbors);
+    free(ds->h_InNodes);
+    free(ds->h_in_neighbors);
+
+    t.Stop();  
+
+    for(NodeID i = 0; i < ds->num_nodes; i++){
+        ds->affected[i] = false;  
+    }
+
+    ofstream out("Alg.csv", std::ios_base::app);   
+    out << t.Seconds() << std::endl;    
+    out.close();
+} 
+
 
 void swap(bool* &a, bool* &b){
   bool *temp = a;

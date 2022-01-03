@@ -21,11 +21,14 @@ class adList_cu: public dataStruc {
     public: 
       int* property_c; 
       bool* frontierArr_c;
+      bool* affected_c;
       NodeID* h_nodes;
+      NodeID* h_InNodes;
       NodeID* d_nodes;
+      NodeID* d_InNodes;
       NodeID* h_out_neighbors;
+      NodeID* h_in_neighbors;
       NodeID* d_out_neighbors;
-      thrust::host_vector<NodeID> h_in_neighbors;
       NodeID* d_in_neighbors;
       std::vector<std::vector<T>> out_neighbors;
       std::vector<std::vector<T>> in_neighbors;  
