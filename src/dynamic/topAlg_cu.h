@@ -46,6 +46,7 @@ public:
 		is_adList2 = (dtype.compare("adListChunked") == 0);
 		std::cout << "Algorithm: " << alg << std::endl;
 		std::cout << "Data type: " << dtype << std::endl;
+		std::cout << "is_adListST" << (is_adListST ? "true" : "false") << std::endl;
     }
     
     void performAlg() {
@@ -222,33 +223,34 @@ public:
 			else if (is_adListST && !ds->weighted) 
 			    return BFSStartFromScratch(ds8, source);  
 		}
-		//  else if (alg == "bfsdyn") {
-	    // 	if(source == -1){
-		// 		DynamicSourcePicker sp(ds);
-		// 		source = sp.PickNext(); 
-		// 		std::cout << "Source in top: " << source << std::endl;
-		// 		if(source == -1)
-		//     		return;
-	   	// 	}
-	    // 	if (is_adList && ds->weighted)
-		// 		return dynBFSAlg(ds0, source);
-	    // 	else if (is_adList && !ds->weighted)
-		// 		return dynBFSAlg(ds1, source);
-	    // 	else if (is_rhh && ds->weighted)
-		// 		return dynBFSAlg(ds2, source);
-	    // 	else if (is_rhh && !ds->weighted)
-		// 		return dynBFSAlg(ds3, source);
-	    // 	else if (is_stinger)
-		// 		return dynBFSAlg(ds4, source);	 
-	    // 	else if (is_adList2 && ds->weighted)
-		// 		return dynBFSAlg(ds5, source);
-	    // 	else if (is_adList2 && !ds->weighted)
-		// 		return dynBFSAlg(ds6, source);  
-		// 	else if (is_adListST && ds->weighted)
-        //         return dynBFSAlg(ds7, source);
-		// 	else if (is_adListST && !ds->weighted) 
-		// 	    return dynBFSAlg(ds8, source);
-		// } 
+		 else if (alg == "bfsdyn") {
+	    	if(source == -1){
+				// DynamicSourcePicker sp(ds);
+				// source = sp.PickNext(); 
+				source = 0;
+				std::cout << "Source in top: " << source << std::endl;
+				if(source == -1)
+		    		return;
+	   		}
+	    	if (is_adList && ds->weighted)
+				return;// dynBFSAlg(ds0, source);
+	    	// else if (is_adList && !ds->weighted)
+			// 	return dynBFSAlg(ds1, source);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return dynBFSAlg(ds2, source);
+	    	// else if (is_rhh && !ds->weighted)
+			// 	return dynBFSAlg(ds3, source);
+	    	// else if (is_stinger)
+			// 	return dynBFSAlg(ds4, source);	 
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return dynBFSAlg(ds5, source);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return dynBFSAlg(ds6, source);  
+			else if (is_adListST && ds->weighted)
+                return dynBFSAlg(ds7, source);
+			else if (is_adListST && !ds->weighted) 
+			    return dynBFSAlg(ds8, source);
+		} 
 		else if (alg == "ssspfromscratch") {
 	    	if (source == -1) {
 				DynamicSourcePicker sp(ds);

@@ -37,7 +37,7 @@ void* dequeAndInsertEdge(
 	    batch++;
 	    alg.performAlg();
 
-		if(ds->num_edges == 234370166)
+		if(ds->num_edges == 1851744)
 		{
 			ofstream myfile;
 			myfile.open("/home/tmathew/sfuhome/dataset/cudaBfsFromScratch" + std::to_string(batch) + ".csv");
