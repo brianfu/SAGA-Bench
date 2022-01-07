@@ -26,6 +26,8 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 
 #include "adList_cu.h"
 
+#include <stdio.h>
+
 // From https://stackoverflow.com/questions/62091548/atomiccas-for-bool-implementation
 static __inline__ __device__ bool atomic_CAS(bool *address, bool compare, bool val)
 {
@@ -56,10 +58,10 @@ static __inline__ __device__ bool atomic_CAS(bool *address, bool compare, bool v
 
 /* Algorithm: Incremental BFS and BFS starting from scratch */
 __global__ void BFSIter0_cuda(bool* affected, int* property, NodeID* d_InNodes, NodeID* d_in_neighbors,
-                    NodeID* d_nodes, NodeID* d_out_neighbors, bool* visited, int numNodes, int numEdges,
+                    NodeID* d_nodes, NodeID* d_out_neighbors, bool* visited, int64_t numNodes, int64_t numEdges,
                     bool* frontierArr, bool* frontierExists) {
     int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
-    const int MAX = 2147483600;
+    const int MAX = 214748360;
     if (idx < numNodes)
     {
         if(affected[idx]){
@@ -68,9 +70,10 @@ __global__ void BFSIter0_cuda(bool* affected, int* property, NodeID* d_InNodes, 
             int iEnd = (idx + 1) < numNodes ? d_InNodes[idx+1] : numEdges;
             for(int i = d_InNodes[idx]; i < iEnd; i++)
             {
-                if (property[d_in_neighbors[i]] != -1)
+                NodeID v = d_in_neighbors[i];
+                if (property[v] != -1)
                 {
-                    newDepth = newDepth <  (property[idx] + 1) ? newDepth : (property[idx] + 1);
+                    newDepth = newDepth <  (property[v] + 1) ? newDepth : (property[v] + 1);
                 }
             }
 
@@ -96,7 +99,7 @@ __global__ void BFSIter0_cuda(bool* affected, int* property, NodeID* d_InNodes, 
                             if(atomic_CAS(&visited[v], curr_val, true))
                                 atomic_CAS(&frontierArr[v], false, true);
                         }
-                        while(!atomicCAS(&property[v], curr_depth, updated_depth)){
+                        while(!(curr_depth == atomicCAS(&property[v], curr_depth, updated_depth))){
                             curr_depth = property[v];
                             if(curr_depth <= updated_depth){
                                 break;
@@ -185,7 +188,7 @@ __global__ void BFSIter0_cuda(bool* affected, int* property, NodeID* d_InNodes, 
 // }
 
 __global__ void dynBfs_kerenel(int* property, NodeID* d_nodes, NodeID* d_out_neighbors,
-                    bool* visited_c, int num_nodes, int num_edges,
+                    bool* visited_c, int64_t num_nodes, int64_t num_edges,
                     bool* frontierArr_c, bool *newFrontierArr, bool* frontierExists){
     int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
     if(idx < num_nodes){
@@ -206,7 +209,7 @@ __global__ void dynBfs_kerenel(int* property, NodeID* d_nodes, NodeID* d_out_nei
                         if(atomic_CAS(&visited_c[v], curr_val, true))
                             atomic_CAS(&newFrontierArr[v], false, true);
                     }
-                    while(!atomicCAS(&property[v], curr_depth, updated_depth)){
+                    while(!(curr_depth == atomicCAS(&property[v], curr_depth, updated_depth))){
                         curr_depth = property[v];
                         if(curr_depth <= updated_depth){
                             break;
@@ -225,10 +228,11 @@ void dynBFSAlg(T* ds, NodeID source){
     Timer t;
     t.Start();
     
-    bool *d_frontierExists;
-    gpuErrchk(cudaMalloc(&d_frontierExists, sizeof(bool)));
+    bool *d_frontierExists = nullptr;
+    gpuErrchk(cudaMalloc((void**)&d_frontierExists, sizeof(bool)));
     bool h_frontierExists = false;
     cudaMemcpy(d_frontierExists, &h_frontierExists, sizeof(bool), cudaMemcpyHostToDevice);
+
 
     int PROPERTY_SIZE = ds->num_nodes * sizeof(*ds->property_c);
     gpuErrchk(cudaMalloc(&ds->property_c, PROPERTY_SIZE));
@@ -237,6 +241,7 @@ void dynBFSAlg(T* ds, NodeID source){
     std::copy(ds->property.begin(), ds->property.end(), property_h);
     if(property_h[source] == -1) property_h[source] = 0;
     cudaMemcpy(ds->property_c, property_h, PROPERTY_SIZE, cudaMemcpyHostToDevice);
+
 
     int FRONTIER_SIZE = ds->num_nodes * sizeof(*ds->frontierArr_c);
     gpuErrchk(cudaMalloc((void**)&ds->frontierArr_c, FRONTIER_SIZE));
@@ -257,7 +262,7 @@ void dynBFSAlg(T* ds, NodeID source){
 
     gpuErrchk(cudaMalloc((void**)&ds->affected_c, FRONTIER_SIZE));
     cudaMemcpy(ds->affected_c, ds->affected.begin(), FRONTIER_SIZE, cudaMemcpyHostToDevice);
-
+    
     int NODES_SIZE = ds->num_nodes * sizeof(NodeID);
     int NEIGHBOURS_SIZE = ds->num_edges * sizeof(NodeID);
 
@@ -295,6 +300,17 @@ void dynBFSAlg(T* ds, NodeID source){
     }
 
     // if(ds->property[source] == -1) ds->property[source] = 0;
+    gpuErrchk(cudaMalloc(&(ds->d_nodes), NODES_SIZE));
+    cudaMemcpy(ds->d_nodes, ds->h_nodes, NODES_SIZE, cudaMemcpyHostToDevice);
+
+    gpuErrchk(cudaMalloc(&(ds->d_out_neighbors), NEIGHBOURS_SIZE));
+    cudaMemcpy(ds->d_out_neighbors, ds->h_out_neighbors, NEIGHBOURS_SIZE, cudaMemcpyHostToDevice);
+
+    gpuErrchk(cudaMalloc(&(ds->d_InNodes), NODES_SIZE));
+    cudaMemcpy(ds->d_InNodes, ds->h_InNodes, NODES_SIZE, cudaMemcpyHostToDevice);
+
+    gpuErrchk(cudaMalloc(&(ds->d_in_neighbors), NEIGHBOURS_SIZE));
+    cudaMemcpy(ds->d_in_neighbors, ds->h_in_neighbors, NEIGHBOURS_SIZE, cudaMemcpyHostToDevice);
 
     const int BLK_SIZE = 512;
     dim3 blkSize(BLK_SIZE);
@@ -303,37 +319,41 @@ void dynBFSAlg(T* ds, NodeID source){
     BFSIter0_cuda<<<gridSize, blkSize>>>(ds->affected_c, ds->property_c, ds->d_InNodes, ds->d_in_neighbors,
                 ds->d_nodes, ds->d_out_neighbors, visited_c, ds->num_nodes, ds->num_edges,
                 ds->frontierArr_c, d_frontierExists);
+
+    cudaDeviceSynchronize();
+    cudaMemcpy(visited_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
+    
+    cudaFree(ds->d_InNodes);
+    cudaFree(ds->d_in_neighbors);
+    cudaFree(ds->affected_c);
     
     cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost);
     
-    while(h_frontierExists){        
-        h_frontierExists = false;     
-        //std::cout << "Queue not empty, Queue size: " << queue.size() << std::endl;
-        cudaMemcpy(visited_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_frontierExists, &h_frontierExists, sizeof(bool), cudaMemcpyHostToDevice);
-        dynBfs_kerenel<<<gridSize, blkSize>>>(ds->property_c, ds->d_nodes, ds->d_out_neighbors,
-                    visited_c, ds->num_nodes, ds->num_edges,
-                    ds->frontierArr_c, newFrontierArr_c, d_frontierExists);
+    // while(h_frontierExists){        
+    //     h_frontierExists = false;     
+    //     //std::cout << "Queue not empty, Queue size: " << queue.size() << std::endl;
+    //     cudaMemcpy(visited_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
+    //     cudaMemcpy(d_frontierExists, &h_frontierExists, sizeof(bool), cudaMemcpyHostToDevice);
+    //     dynBfs_kerenel<<<gridSize, blkSize>>>(ds->property_c, ds->d_nodes, ds->d_out_neighbors,
+    //                 visited_c, ds->num_nodes, ds->num_edges,
+    //                 ds->frontierArr_c, newFrontierArr_c, d_frontierExists);
 
-        cudaDeviceSynchronize();
-        swap(ds->frontierArr_c, newFrontierArr_c);
-        cudaMemcpy(newFrontierArr_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
-        cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost);        
-    }    
+    //     cudaDeviceSynchronize();
+    //     swap(ds->frontierArr_c, newFrontierArr_c);
+    //     cudaMemcpy(newFrontierArr_c, frontierArr_h, FRONTIER_SIZE, cudaMemcpyHostToDevice);
+    //     cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost);        
+    // }    
 
     cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost);
     std::copy(property_h, property_h + ds->num_nodes, ds->property.begin());
     
+    cudaFree(visited_c);
     cudaFree(d_frontierExists);
     cudaFree(ds->property_c);
     cudaFree(ds->frontierArr_c);
     cudaFree(newFrontierArr_c);
     cudaFree(ds->d_nodes);
     cudaFree(ds->d_out_neighbors);
-    cudaFree(ds->d_InNodes);
-    cudaFree(ds->d_in_neighbors);
-    cudaFree(ds->affected_c);
-    cudaFree(visited_c);
 
     free(property_h);
     free(frontierArr_h);
@@ -351,6 +371,9 @@ void dynBFSAlg(T* ds, NodeID source){
     ofstream out("Alg.csv", std::ios_base::app);   
     out << t.Seconds() << std::endl;    
     out.close();
+
+    // cudaDeviceReset();
+    std::cout <<"Exiting dynamic BFS " << std::endl;
 } 
 
 
