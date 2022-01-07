@@ -53,16 +53,16 @@ bool adList_cu<T>::vertexExists(const Edge& e, bool source)
 	exists = e.destExists;
     if (exists) {        
         num_edges++;        
-        return true;
+        // return true;
         if(source) affected[e.source] = 1;
         else affected[e.destination] = 1;
-        // return true;
+        return true;
     } else {
         num_nodes++;        
         num_edges++;
-        return false;
-        affected.push_back(1);
         // return false;
+        affected.push_back(1);
+        return false;
     }  
 }
 
