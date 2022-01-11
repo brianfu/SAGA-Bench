@@ -74,9 +74,10 @@ __global__ void BFSIter0_cuda(bool* affected, int* property, NodeID* d_InNodes, 
             for(int i = d_nodes[idx]; i < iEnd; i++)
             {
                 NodeID v = d_out_neighbors[i];
-                if (property[v] != -1)
+                int neighborDepth = property[v];
+                if (neighborDepth != -1)
                 {
-                    newDepth = newDepth <  (property[v] + 1) ? newDepth : (property[v] + 1);
+                    newDepth = newDepth <  (neighborDepth + 1) ? newDepth : (neighborDepth + 1);
                 }
             }
 
@@ -209,7 +210,7 @@ __global__ void dynBfs_kerenel(int* property, NodeID* d_nodes, NodeID* d_out_nei
                         atomic_CAS(frontierExists, false, true);
                     }
                     if(!curr_val){
-                        if(atomic_CAS(&visited_c[v], curr_val, true))
+                        if(curr_val == atomic_CAS(&visited_c[v], curr_val, true))
                             atomic_CAS(&newFrontierArr[v], false, true);
                     }
                     while(!(curr_depth == atomicCAS(&property[v], curr_depth, updated_depth))){
@@ -374,9 +375,6 @@ void dynBFSAlg(T* ds, NodeID source){
     ofstream out("Alg.csv", std::ios_base::app);   
     out << t.Seconds() << std::endl;    
     out.close();
-
-    // cudaDeviceReset();
-    std::cout <<"Exiting dynamic BFS " << std::endl;
 } 
 
 
