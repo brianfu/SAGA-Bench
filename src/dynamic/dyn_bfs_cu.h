@@ -354,11 +354,11 @@ void dynBFSAlg(T* ds, NodeID source){
     // cudaMemcpy(d_frontierNum, &(currentNode), sizeof(int), cudaMemcpyHostToDevice);
 
     NodeID* d_frontierNodes;
-    gpuErrchk(cudaMalloc(d_frontierNodes, NODES_SIZE));
+    gpuErrchk(cudaMalloc(&d_frontierNodes, NODES_SIZE));
     cudaMemset(d_frontierNodes, 0, NODES_SIZE);
 
     NodeID* d_newFrontierNodes;
-    gpuErrchk(cudaMalloc(d_newFrontierNodes, NODES_SIZE));
+    gpuErrchk(cudaMalloc(&d_newFrontierNodes, NODES_SIZE));
     cudaMemset(d_newFrontierNodes, 0, NODES_SIZE);
 
     const int BLK_SIZE = 512;
@@ -378,12 +378,12 @@ void dynBFSAlg(T* ds, NodeID source){
     cudaFree(d_affectedNodes);
     cudaFree(d_affectedNum);
     
-    // int frontierNum = 0;
+    int frontierNum = 0;
     int* d_newFrontierNum;
     gpuErrchk(cudaMalloc(&(d_newFrontierNum), sizeof(int)));
     cudaMemset(d_newFrontierNum, 0, sizeof(int));
     // swap(d_frontierNum, d_newFrontierNum);
-    // cudaMemcpy(&frontierNum, d_frontierNum, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(&frontierNum, d_frontierNum, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost);
     
     while(h_frontierExists){        
@@ -402,6 +402,7 @@ void dynBFSAlg(T* ds, NodeID source){
         cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost);
 
         swap(d_frontierNum, d_newFrontierNum);
+        cudaMemcpy(&frontierNum, d_frontierNum, sizeof(int), cudaMemcpyDeviceToHost);
         cudaMemset(d_newFrontierNum, 0, sizeof(int));
 
         swap(d_frontierNodes, d_newFrontierNodes);
