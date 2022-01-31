@@ -1,16 +1,6 @@
 #ifndef DYN_BFS_H_
 #define DYN_BFS_H_
 
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-{
-   if (code != cudaSuccess) 
-   {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
-}
-
 #include <algorithm>
 
 #include <thrust/copy.h>
@@ -25,6 +15,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 #include "../common/pvector.h"
 
 #include "adList_cu.h"
+#include "adList_cu_support.h"
 
 #include <stdio.h>
 
@@ -57,11 +48,11 @@ static __inline__ __device__ bool atomic_CAS(bool *address, bool compare, bool v
 }
 
 /* Algorithm: Incremental BFS and BFS starting from scratch */
-__global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* d_frontierNum, NodeID* d_frontierNodes, NodeID* d_newFrontierNodes, bool* affected, int* property, NodeID* d_InNodes, NodeID* d_in_neighbors,
-                    NodeID* d_nodes, NodeID* d_out_neighbors, bool* visited, int64_t numNodes, int64_t numEdges,
+__global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* d_frontierNum, NodeID* d_frontierNodes, NodeID* d_newFrontierNodes, bool* affected, int* property, NodeID** d_NeighborsArrays, int* d_NeighborSizes,
+                    bool* visited, int64_t numNodes, int64_t numEdges,
                     bool* frontierArr, bool* frontierExists) {
     int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
-    const int MAX = 214748360;
+    const int MAX = 2147483600;
     if (idx < *d_affectedNum)
     {
         NodeID node = d_affectedNodes[idx];
@@ -71,10 +62,10 @@ __global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* 
             // Not using in-neghibors because graph being tested is not directed
             // int iEnd = (idx + 1) < numNodes ? d_InNodes[idx+1] : numEdges;
             // for(int i = d_InNodes[idx]; i < iEnd; i++)
-            int iEnd = (node + 1) < numNodes ? d_nodes[node+1] : numEdges;
-            for(int i = d_nodes[node]; i < iEnd; i++)
+            int iEnd = d_NeighborSizes[node];
+            for(int i = 0; i < iEnd; i++)
             {
-                NodeID v = d_out_neighbors[i];
+                NodeID v = d_NeighborsArrays[node][i];
                 int neighborDepth = property[v];
                 if (neighborDepth != -1)
                 {
@@ -92,10 +83,10 @@ __global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* 
                     atomic_CAS(frontierExists, false, true);
                 }
                 property[node] = newDepth;
-                int iOutEnd = (node + 1) < numNodes ? d_nodes[node+1] : numEdges;
-                for(int j = d_nodes[node]; j < iOutEnd; j++)
+                int iOutEnd = d_NeighborSizes[node];
+                for(int j = 0; j < iOutEnd; j++)
                 {
-                    NodeID v = d_out_neighbors[j]; 
+                    NodeID v = d_NeighborsArrays[node][j]; 
                     int curr_depth = property[v];
                     int updated_depth = newDepth + 1;
                     if((updated_depth < curr_depth) || (curr_depth == -1)){
@@ -198,16 +189,16 @@ __global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* 
 //     }   
 // }
 
-__global__ void dynBfs_kerenel(int* d_frontierNum, NodeID* d_frontierNodes, NodeID* d_newFrontierNodes, int* d_newFrontierNum, int* property, NodeID* d_nodes, NodeID* d_out_neighbors,
+__global__ void dynBfs_kerenel(int* d_frontierNum, NodeID* d_frontierNodes, NodeID* d_newFrontierNodes, int* d_newFrontierNum, int* property, NodeID** d_NeighborsArrays, int* d_NeighborSizes,
                     bool* visited_c, int64_t num_nodes, int64_t num_edges,
                     bool* frontierExists){
     int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
     if(idx < *d_frontierNum){
         NodeID node = d_frontierNodes[idx];
-        int iEnd = (node + 1) < num_nodes ? d_nodes[node+1] : num_edges;
-        for(int i = d_nodes[node]; i < iEnd; i++)
+        int iEnd = d_NeighborSizes[node];
+        for(int i = 0; i < iEnd; i++)
         {
-            NodeID v = d_out_neighbors[i]; 
+            NodeID v = d_NeighborsArrays[node][i]; 
             int curr_depth = property[v];
             int updated_depth = property[node] + 1;
             if((updated_depth < curr_depth) || (curr_depth == -1)){
@@ -242,6 +233,19 @@ void dynBFSAlg(T* ds, NodeID source){
     
     Timer t;
     t.Start();
+
+    if(ds->sizeOfNodesArrayOnCuda < ds->num_nodes)
+    {
+        resizeAndCopyToCudaMemory(ds);
+    }
+    // else if(ds->sizeOfNodesArrayOnCuda < ds->num_nodes)
+    // {
+    //     copyToCudaMemory(ds);
+    // }
+    // else
+    // {
+    //     updateNeighbors(ds);
+    // }
     
     bool *d_frontierExists = nullptr;
     gpuErrchk(cudaMalloc((void**)&d_frontierExists, sizeof(bool)));
@@ -249,12 +253,14 @@ void dynBFSAlg(T* ds, NodeID source){
     cudaMemset(d_frontierExists, 0, sizeof(bool));
 
     int PROPERTY_SIZE = ds->num_nodes * sizeof(*ds->property_c);
-    gpuErrchk(cudaMalloc(&ds->property_c, PROPERTY_SIZE));
     int *property_h;
     property_h = (int *)malloc(PROPERTY_SIZE);
-    std::copy(ds->property.begin(), ds->property.end(), property_h);
-    if(property_h[source] == -1) property_h[source] = 0;
-    gpuErrchk(cudaMemcpy(ds->property_c, property_h, PROPERTY_SIZE, cudaMemcpyHostToDevice));
+    // if(ds->property[source] == -1)
+    // {
+    //     gpuErrchk(cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
+    //     property_h[source] = 0;
+    //     gpuErrchk(cudaMemcpy(ds->property_c, property_h, PROPERTY_SIZE, cudaMemcpyHostToDevice));
+    // }
 
 
     int FRONTIER_SIZE = ds->num_nodes * sizeof(*ds->frontierArr_c);
@@ -267,61 +273,7 @@ void dynBFSAlg(T* ds, NodeID source){
     gpuErrchk(cudaMemcpy(ds->affected_c, ds->affected.begin(), FRONTIER_SIZE, cudaMemcpyHostToDevice));
     
     int NODES_SIZE = ds->num_nodes * sizeof(NodeID);
-    int NEIGHBOURS_SIZE = ds->num_edges * sizeof(NodeID);
-
-    ds->h_nodes = (NodeID *)malloc(NODES_SIZE);
-    ds->h_out_neighbors = (NodeID *)malloc(NEIGHBOURS_SIZE);
-    int neighborPosition = 0;
-    int currentNode = 0;
-    for(auto outNeighbor = ds->out_neighbors.begin(); outNeighbor != ds->out_neighbors.end(); outNeighbor++)
-    {
-        ds->h_nodes[currentNode] = neighborPosition;
-        currentNode++;
-        
-        for(auto node = (*outNeighbor).begin(); node != (*outNeighbor).end(); node++)
-        {
-            ds->h_out_neighbors[neighborPosition] = (*node).getNodeID();
-            neighborPosition++;
-        }
-    }
-
-    // neighborPosition = 0;
-    // currentNode = 0;
-    
-    // for(auto inNeighbor = ds->in_neighbors.begin(); inNeighbor != ds->in_neighbors.end(); inNeighbor++)
-    // {
-    //     ds->h_InNodes[currentNode] = neighborPosition;
-    //     currentNode++;
-        
-    //     for(auto node = (*inNeighbor).begin(); node != (*inNeighbor).end(); node++)
-    //     {
-    //         ds->h_in_neighbors[neighborPosition] = (*node).getNodeID();
-    //         neighborPosition++;
-    //     }
-    // }
-
-    // if(ds->property[source] == -1) ds->property[source] = 0;
-    gpuErrchk(cudaMalloc(&(ds->d_nodes), NODES_SIZE));
-    gpuErrchk(cudaMemcpy(ds->d_nodes, ds->h_nodes, NODES_SIZE, cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&(ds->d_out_neighbors), NEIGHBOURS_SIZE));
-    gpuErrchk(cudaMemcpy(ds->d_out_neighbors, ds->h_out_neighbors, NEIGHBOURS_SIZE, cudaMemcpyHostToDevice));
-
-    // gpuErrchk(cudaMalloc(&(ds->d_InNodes), NODES_SIZE));
-    // gpuErrchk(cudaMemcpy(ds->d_InNodes, ds->h_InNodes, NODES_SIZE, cudaMemcpyHostToDevice));
-
-    // gpuErrchk(cudaMalloc(&(ds->d_in_neighbors), NEIGHBOURS_SIZE));
-    // gpuErrchk(cudaMemcpy(ds->d_in_neighbors, ds->h_in_neighbors, NEIGHBOURS_SIZE, cudaMemcpyHostToDevice));
-
-    std::vector<NodeID> affectedNodes;
-    for(NodeID i = 0; i < ds->num_nodes; i++){
-        if(ds->affected[i])
-        {
-            affectedNodes.push_back(i);
-        }
-    }
-
-    int affectedNum = affectedNodes.size();
+    int affectedNum = ds->affectedNodes.size();
     int* d_affectedNum;
     gpuErrchk(cudaMalloc(&(d_affectedNum), sizeof(int)));
     gpuErrchk(cudaMemcpy(d_affectedNum, &(affectedNum), sizeof(int), cudaMemcpyHostToDevice));
@@ -329,7 +281,7 @@ void dynBFSAlg(T* ds, NodeID source){
     int AFFECTED_SIZE = affectedNum * sizeof(NodeID);
     NodeID* d_affectedNodes;
     gpuErrchk(cudaMalloc(&(d_affectedNodes), AFFECTED_SIZE));
-    gpuErrchk(cudaMemcpy(d_affectedNodes, &(affectedNodes[0]), AFFECTED_SIZE, cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_affectedNodes, &(ds->affectedNodes[0]), AFFECTED_SIZE, cudaMemcpyHostToDevice));
     std::cout <<"Running dynamic BFS " << std::endl;
 
     int* d_frontierNum;
@@ -348,9 +300,10 @@ void dynBFSAlg(T* ds, NodeID source){
     dim3 blkSize(BLK_SIZE);
     dim3 gridSize((affectedNum + BLK_SIZE - 1) / BLK_SIZE);
 
-    BFSIter0_cuda<<<gridSize, blkSize>>>(d_affectedNodes, d_affectedNum, d_frontierNum, d_frontierNodes, d_newFrontierNodes, ds->affected_c, ds->property_c, ds->d_InNodes, ds->d_in_neighbors,
-                ds->d_nodes, ds->d_out_neighbors, visited_c, ds->num_nodes, ds->num_edges,
-                ds->frontierArr_c, d_frontierExists);
+    // BFSIter0_cuda<<<gridSize, blkSize>>>(d_affectedNodes, d_affectedNum, d_frontierNum, d_frontierNodes,
+    //             d_newFrontierNodes, ds->affected_c, ds->property_c, ds->d_NeighborsArrays, ds->d_NeighborSizes,
+    //             visited_c, ds->num_nodes, ds->num_edges,
+    //             ds->frontierArr_c, d_frontierExists);
 
     cudaDeviceSynchronize();
     cudaMemset(visited_c, 0, FRONTIER_SIZE);
@@ -374,9 +327,9 @@ void dynBFSAlg(T* ds, NodeID source){
         cudaMemset(visited_c, 0, FRONTIER_SIZE);
         cudaMemset(d_frontierExists, 0, sizeof(bool));
         gridSize = (frontierNum + BLK_SIZE - 1) / BLK_SIZE;
-        dynBfs_kerenel<<<gridSize, blkSize>>>(d_frontierNum, d_frontierNodes, d_newFrontierNodes, d_newFrontierNum, ds->property_c, ds->d_nodes, ds->d_out_neighbors,
-                    visited_c, ds->num_nodes, ds->num_edges,
-                    d_frontierExists);
+        // dynBfs_kerenel<<<gridSize, blkSize>>>(d_frontierNum, d_frontierNodes, d_newFrontierNodes, d_newFrontierNum, ds->property_c,  ds->d_NeighborsArrays, ds->d_NeighborSizes,
+        //             visited_c, ds->num_nodes, ds->num_edges,
+        //             d_frontierExists);
 
         cudaDeviceSynchronize();
         gpuErrchk(cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost));
@@ -389,14 +342,11 @@ void dynBFSAlg(T* ds, NodeID source){
         cudaMemset(d_newFrontierNodes, 0, NODES_SIZE);
     }    
 
-    gpuErrchk(cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
-    std::copy(property_h, property_h + ds->num_nodes, ds->property.begin());
+    // gpuErrchk(cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
+    // std::copy(property_h, property_h + ds->num_nodes, ds->property.begin());
     
     cudaFree(visited_c);
     cudaFree(d_frontierExists);
-    cudaFree(ds->property_c);
-    cudaFree(ds->d_nodes);
-    cudaFree(ds->d_out_neighbors);
 
     cudaFree(d_frontierNum);
     cudaFree(d_frontierNodes);
@@ -404,10 +354,6 @@ void dynBFSAlg(T* ds, NodeID source){
     cudaFree(d_newFrontierNum);
 
     free(property_h);
-    free(ds->h_nodes);
-    free(ds->h_out_neighbors);
-    free(ds->h_InNodes);
-    free(ds->h_in_neighbors);
 
     t.Stop();  
 
