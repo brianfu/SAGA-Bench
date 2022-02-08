@@ -8,6 +8,12 @@
 #include <queue>
 #include <vector>
 
+#ifdef __CUDACC__
+#define CUDA_HOSTDEV __host__ __device__
+#else
+#define CUDA_HOSTDEV
+#endif
+
 /* Basic building blocks for node and its variations, typedefs. */
 
 typedef int64_t NodeID;
@@ -30,7 +36,7 @@ public:
 
 class BaseNode {
     public: 
-      virtual NodeID getNodeID() const = 0;  
+      CUDA_HOSTDEV virtual NodeID getNodeID() const = 0;  
       virtual Weight getWeight() const = 0;  
       virtual void setInfo(NodeID n, Weight w) = 0;
       virtual void printNode() const = 0;      
@@ -38,15 +44,15 @@ class BaseNode {
 
 class Node: public BaseNode {
 private:
-    NodeID node;
 public:
-    Node(): node(-1){}
-    Node(NodeID n):node(n){}
+    NodeID node;
+    CUDA_HOSTDEV Node(): node(-1){}
+    CUDA_HOSTDEV Node(NodeID n):node(n){}
     void setInfo(NodeID n, Weight w){
 	(void)w;
 	node = n;
     }
-    NodeID getNodeID() const {return node;}
+    CUDA_HOSTDEV NodeID getNodeID() const {return node;}
     Weight getWeight() const {return -1;}
     void printNode() const{
 	std::cout << node << "  ";
@@ -64,7 +70,7 @@ class NodeWeight: public BaseNode {
            node = n; weight = w;
        }
        Weight getWeight() const {return weight;}
-       NodeID getNodeID() const {return node;}
+       CUDA_HOSTDEV NodeID getNodeID() const {return node;}
        void printNode() const{
 	   std::cout << "(" << node << "," << weight  << ")" << "  ";
        }
