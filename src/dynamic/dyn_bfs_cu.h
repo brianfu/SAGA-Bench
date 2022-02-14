@@ -232,20 +232,39 @@ template<typename T>
 void dynBFSAlg(T* ds, NodeID source){
     
     Timer t;
-    t.Start();
+    Timer t_cuda;
+    Timer t1_cuda;
+    Timer t2_cuda;
+    Timer t3_cuda;
+
+    double t1Time = 0;
+    double t2Time = 0;
+    double t3Time = 0;
 
     if(ds->sizeOfNodesArrayOnCuda < ds->num_nodes)
     {
+        t1_cuda.Start();
         resizeAndCopyToCudaMemory(ds);
+        t1_cuda.Stop();
+        t1Time = t1_cuda.Seconds();
     }
     else if(ds->numberOfNodesOnCuda < ds->num_nodes)
     {
+        t2_cuda.Start();
         copyToCudaMemory(ds);
+        t2_cuda.Stop();
+        t2Time = t2_cuda.Seconds();
     }
     else
     {
+        t3_cuda.Start();
         updateNeighbors(ds);
+        t3_cuda.Stop();
+        t3Time = t3_cuda.Seconds();
     }
+
+    t_cuda.Start();
+    ds->affectedNodes.assign(ds->affectedNodesSet.begin(), ds->affectedNodesSet.end());
     
     bool *d_frontierExists = nullptr;
     gpuErrchk(cudaMalloc((void**)&d_frontierExists, sizeof(bool)));
@@ -295,7 +314,9 @@ void dynBFSAlg(T* ds, NodeID source){
     NodeID* d_newFrontierNodes;
     gpuErrchk(cudaMalloc(&d_newFrontierNodes, NODES_SIZE));
     cudaMemset(d_newFrontierNodes, 0, NODES_SIZE);
+    t_cuda.Stop();
 
+    t.Start();
     const int BLK_SIZE = 512;
     dim3 blkSize(BLK_SIZE);
     dim3 gridSize((affectedNum + BLK_SIZE - 1) / BLK_SIZE);
@@ -354,17 +375,43 @@ void dynBFSAlg(T* ds, NodeID source){
     cudaFree(d_newFrontierNodes);
     cudaFree(d_newFrontierNum);
 
-    t.Stop();  
-
+    #pragma omp for schedule(dynamic, 16)
     for(NodeID i = 0; i < ds->num_nodes; i++){
         ds->affected[i] = false;  
     }
+
+    t.Stop();  
+
+    Timer t4_cuda;
+    t4_cuda.Start();
     (ds->affectedNodes).clear();
     ds->affectedNodesSet.clear();
+    t4_cuda.Stop();
 
-    ofstream out("Alg.csv", std::ios_base::app);   
+    ofstream out("JustAlg.csv", std::ios_base::app);   
     out << t.Seconds() << std::endl;    
     out.close();
+
+    ofstream cuda_out("InitFrontierMisc.csv", std::ios_base::app);   
+    cuda_out << t_cuda.Seconds() << std::endl;    
+    cuda_out.close();
+
+    ofstream cuda1_out("resizeAndCopyToCudaMemory.csv", std::ios_base::app);   
+    cuda1_out << t1Time << std::endl;    
+    cuda1_out.close();
+
+    ofstream cuda2_out("copyToCudaMemory.csv", std::ios_base::app);   
+    cuda2_out << t2Time << std::endl;    
+    cuda2_out.close();
+
+    ofstream cuda3_out("updateNeighbors.csv", std::ios_base::app);   
+    cuda3_out << t3Time << std::endl;    
+    cuda3_out.close();
+
+    ofstream cuda4_out("clearAffected.csv", std::ios_base::app);   
+    cuda4_out << t4_cuda.Seconds() << std::endl;    
+    cuda4_out.close();
+
     std::cout << "Exiting!" << std::endl;
 } 
 

@@ -69,7 +69,10 @@ class adList_cu: public dataStruc {
       int numberOfNeighborsOnCuda;
       int sizeOfNodesArrayOnCuda;
       Node** d_NeighborsArrays;
+      Node** h_NeighborsArrays;
       int* d_NeighborSizes;
+      int* h_NeighborSizes;
+      int* h_NeighborCapacity;
 };
 
 // template <typename T>
