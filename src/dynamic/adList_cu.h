@@ -57,6 +57,7 @@ class adList_cu: public dataStruc {
       std::vector<std::vector<NodeID>> out_neighborsNodeID;
       std::vector<std::vector<T>> out_neighbors;
       std::vector<std::vector<T>> in_neighbors;  
+      std::vector<std::vector<T>> out_neighborsDelta;
       std::vector<NodeID> affectedNodes;
       std::set<NodeID> affectedNodesSet;
       adList_cu(bool w, bool d); 
@@ -148,6 +149,7 @@ void adList_cu<T>::updateForNewVertex(const Edge& e, bool source)
 	    neighbor.setInfo(e.source, e.weight);   
         edge_data.push_back(neighbor);
         out_neighbors.push_back(edge_data);
+        out_neighborsDelta.push_back(edge_data);
         // push some junk in in_neighbors
         if (directed) {
             std::vector<T> fake_edge_data;
@@ -197,6 +199,7 @@ void adList_cu<T>::updateForExistingVertex(const Edge& e, bool source)
             T neighbor;
             neighbor.setInfo(dest, e.weight);           
             out_neighbors[index].push_back(neighbor); 
+            out_neighborsDelta[index].push_back(neighbor);
         }           
     } else if (!source && directed) {
         // in_neighbors    
