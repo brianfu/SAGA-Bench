@@ -384,6 +384,10 @@ void dynBFSAlg(T* ds, NodeID source){
 
     Timer t4_cuda;
     t4_cuda.Start();
+    #pragma omp for schedule(dynamic, 16)
+    for(NodeID i : ds->affectedNodesSet){
+        ds->out_neighborsDelta[i].clear();  
+    }
     (ds->affectedNodes).clear();
     ds->affectedNodesSet.clear();
     t4_cuda.Stop();
