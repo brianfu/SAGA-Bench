@@ -246,8 +246,8 @@ public:
 			// 	return dynBFSAlg(ds5, source);
 	    	// else if (is_adList2 && !ds->weighted)
 			// 	return dynBFSAlg(ds6, source);  
-			else if (is_adListST && ds->weighted)
-                return dynBFSAlg(ds7, source);
+			// else if (is_adListST && ds->weighted)
+            //     return dynBFSAlg(ds7, source);
 			else if (is_adListST && !ds->weighted) 
 			    return dynBFSAlg(ds8, source);
 		} 
