@@ -30,6 +30,9 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, int i, bool 
 #include "abstract_data_struc.h"
 #include "print.h"
 #include <set>
+#include <mutex>
+#include <condition_variable>
+#include <thread>
 
 
 // T can be either node or nodeweight
@@ -40,6 +43,7 @@ class adList_cu: public dataStruc {
       void updateForNewVertex(const Edge& e, bool source);
       void updateForExistingVertex(const Edge& e, bool source);      
       void initProperties(int* property, int numNodes);
+      void freeStaleArrays();
       
     public: 
       
@@ -74,6 +78,11 @@ class adList_cu: public dataStruc {
       int* d_NeighborSizes;
       int* h_NeighborSizes;
       int* h_NeighborCapacity;
+
+      std::vector<T*> stale_neighbors;
+      std::mutex cudaNeighborsMutex;
+      std::condition_variable cudaNeighborsConditional;
+      bool isAlive;
 };
 
 // template <typename T>
@@ -87,8 +96,41 @@ class adList_cu: public dataStruc {
 // }
 
 template <typename T>
-adList_cu<T>::adList_cu(bool w, bool d)
-    : dataStruc(w, d), sizeOfNodesArrayOnCuda(0) { /*std::cout << "Creating AdList" << std::endl;*/ }    
+inline void adList_cu<T>::freeStaleArrays()
+{
+    
+}
+
+template <>
+inline void adList_cu<Node>::freeStaleArrays()
+{
+    while(isAlive)
+    { 
+        {
+            std::unique_lock<std::mutex> lock(cudaNeighborsMutex);
+            #pragma omp for schedule(dynamic, 16)
+            for(int i = 0; i < stale_neighbors.size(); i++)
+            {
+                cudaFree(stale_neighbors[i]);
+            }
+            stale_neighbors.clear();
+            cudaNeighborsConditional.wait(lock);
+        }
+    }
+}
+
+
+template <typename T>
+inline adList_cu<T>::adList_cu(bool w, bool d)
+    : dataStruc(w, d), sizeOfNodesArrayOnCuda(0), isAlive(true) {
+         /*std::cout << "Creating AdList" << std::endl;*/ }    
+
+template <>
+inline adList_cu<Node>::adList_cu(bool w, bool d)
+    : dataStruc(w, d), sizeOfNodesArrayOnCuda(0), isAlive(true) {
+        std::thread cudaFreeWorker(&adList_cu<Node>::freeStaleArrays, this);
+        cudaFreeWorker.detach();
+         /*std::cout << "Creating AdList" << std::endl;*/ }    
 
 template <typename T>
 adList_cu<T>::~adList_cu()
@@ -107,6 +149,9 @@ adList_cu<T>::~adList_cu()
 
         cudaFree(d_NeighborSizes);
         cudaFree(property_c);
+
+        isAlive = false;
+        cudaNeighborsConditional.notify_all();
     }
 }
 

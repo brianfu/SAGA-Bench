@@ -230,193 +230,197 @@ __global__ void dynBfs_kerenel(int* d_frontierNum, NodeID* d_frontierNodes, Node
 
 template<typename T>
 void dynBFSAlg(T* ds, NodeID source){
-    
-    Timer t;
-    Timer t_cuda;
-    Timer t1_cuda;
-    Timer t2_cuda;
-    Timer t3_cuda;
-
-    double t1Time = 0;
-    double t2Time = 0;
-    double t3Time = 0;
-
-    if(ds->sizeOfNodesArrayOnCuda < ds->num_nodes)
     {
-        t1_cuda.Start();
-        resizeAndCopyToCudaMemory(ds);
-        t1_cuda.Stop();
-        t1Time = t1_cuda.Seconds();
-    }
-    else if(ds->numberOfNodesOnCuda < ds->num_nodes)
-    {
-        t2_cuda.Start();
-        copyToCudaMemory(ds);
-        t2_cuda.Stop();
-        t2Time = t2_cuda.Seconds();
-    }
-    else
-    {
-        t3_cuda.Start();
-        updateNeighbors(ds);
-        t3_cuda.Stop();
-        t3Time = t3_cuda.Seconds();
-    }
+        std::scoped_lock lock(ds->cudaNeighborsMutex);
 
-    t_cuda.Start();
-    ds->affectedNodes.assign(ds->affectedNodesSet.begin(), ds->affectedNodesSet.end());
-    
-    bool *d_frontierExists = nullptr;
-    gpuErrchk(cudaMalloc((void**)&d_frontierExists, sizeof(bool)));
-    bool h_frontierExists = false;
-    cudaMemset(d_frontierExists, 0, sizeof(bool));
+        Timer t;
+        Timer t_cuda;
+        Timer t1_cuda;
+        Timer t2_cuda;
+        Timer t3_cuda;
 
-    int PROPERTY_SIZE = ds->sizeOfNodesArrayOnCuda * sizeof(*ds->property_c);
-    int *property_h;
-    property_h = (int *)malloc(PROPERTY_SIZE);
-    if(ds->property[source] == -1)
-    {
-        gpuErrchk(cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
-        property_h[source] = 0;
-        gpuErrchk(cudaMemcpy(ds->property_c, property_h, PROPERTY_SIZE, cudaMemcpyHostToDevice));
-    }
+        double t1Time = 0;
+        double t2Time = 0;
+        double t3Time = 0;
 
+        if(ds->sizeOfNodesArrayOnCuda < ds->num_nodes)
+        {
+            t1_cuda.Start();
+            resizeAndCopyToCudaMemory(ds);
+            t1_cuda.Stop();
+            t1Time = t1_cuda.Seconds();
+        }
+        else if(ds->numberOfNodesOnCuda < ds->num_nodes)
+        {
+            t2_cuda.Start();
+            copyToCudaMemory(ds);
+            t2_cuda.Stop();
+            t2Time = t2_cuda.Seconds();
+        }
+        else
+        {
+            t3_cuda.Start();
+            updateNeighbors(ds);
+            t3_cuda.Stop();
+            t3Time = t3_cuda.Seconds();
+        }
 
-    int FRONTIER_SIZE = ds->num_nodes * sizeof(*ds->frontierArr_c);
-    
-    bool* visited_c;
-    gpuErrchk(cudaMalloc((void**)&visited_c, FRONTIER_SIZE));
-    cudaMemset(visited_c, 0, FRONTIER_SIZE);
-
-    // gpuErrchk(cudaMalloc((void**)&ds->affected_c, FRONTIER_SIZE));
-    // gpuErrchk(cudaMemcpy(ds->affected_c, ds->affected.begin(), FRONTIER_SIZE, cudaMemcpyHostToDevice));
-    
-    int NODES_SIZE = ds->num_nodes * sizeof(NodeID);
-    int affectedNum = ds->affectedNodes.size();
-    int* d_affectedNum;
-    gpuErrchk(cudaMalloc(&(d_affectedNum), sizeof(int)));
-    gpuErrchk(cudaMemcpy(d_affectedNum, &(affectedNum), sizeof(int), cudaMemcpyHostToDevice));
-
-    int AFFECTED_SIZE = affectedNum * sizeof(NodeID);
-    NodeID* d_affectedNodes;
-    gpuErrchk(cudaMalloc(&(d_affectedNodes), AFFECTED_SIZE));
-    gpuErrchk(cudaMemcpy(d_affectedNodes, &(ds->affectedNodes[0]), AFFECTED_SIZE, cudaMemcpyHostToDevice));
-    std::cout <<"Running dynamic BFS " << std::endl;
-
-    int* d_frontierNum;
-    gpuErrchk(cudaMalloc(&(d_frontierNum), sizeof(int)));
-    cudaMemset(d_frontierNum, 0, sizeof(int));
-
-    NodeID* d_frontierNodes;
-    gpuErrchk(cudaMalloc(&d_frontierNodes, NODES_SIZE));
-    cudaMemset(d_frontierNodes, 0, NODES_SIZE);
-
-    NodeID* d_newFrontierNodes;
-    gpuErrchk(cudaMalloc(&d_newFrontierNodes, NODES_SIZE));
-    cudaMemset(d_newFrontierNodes, 0, NODES_SIZE);
-    t_cuda.Stop();
-
-    t.Start();
-    const int BLK_SIZE = 512;
-    dim3 blkSize(BLK_SIZE);
-    dim3 gridSize((affectedNum + BLK_SIZE - 1) / BLK_SIZE);
-
-    BFSIter0_cuda<<<gridSize, blkSize>>>(d_affectedNodes, d_affectedNum, d_frontierNum, d_frontierNodes,
-                d_newFrontierNodes, ds->affected_c, ds->property_c, ds->d_NeighborsArrays, ds->d_NeighborSizes,
-                visited_c, ds->num_nodes, ds->num_edges,
-                ds->frontierArr_c, d_frontierExists);
-
-    cudaDeviceSynchronize();
-    cudaMemset(visited_c, 0, FRONTIER_SIZE);
-    
-    // cudaFree(ds->d_InNodes);
-    // cudaFree(ds->d_in_neighbors);
-    // cudaFree(ds->affected_c);
-    cudaFree(d_affectedNodes);
-    cudaFree(d_affectedNum);
-    
-    int frontierNum = 0;
-    gpuErrchk(cudaMemcpy(&frontierNum, d_frontierNum, sizeof(int), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost));
-    int* d_newFrontierNum;
-    gpuErrchk(cudaMalloc(&(d_newFrontierNum), sizeof(int)));
-    cudaMemset(d_newFrontierNum, 0, sizeof(int));
-    
-    while(h_frontierExists){        
-        h_frontierExists = false;     
-        //std::cout << "Queue not empty, Queue size: " << queue.size() << std::endl;
-        cudaMemset(visited_c, 0, FRONTIER_SIZE);
+        t_cuda.Start();
+        ds->affectedNodes.assign(ds->affectedNodesSet.begin(), ds->affectedNodesSet.end());
+        
+        bool *d_frontierExists = nullptr;
+        gpuErrchk(cudaMalloc((void**)&d_frontierExists, sizeof(bool)));
+        bool h_frontierExists = false;
         cudaMemset(d_frontierExists, 0, sizeof(bool));
-        gridSize = (frontierNum + BLK_SIZE - 1) / BLK_SIZE;
-        dynBfs_kerenel<<<gridSize, blkSize>>>(d_frontierNum, d_frontierNodes, d_newFrontierNodes, d_newFrontierNum, ds->property_c,  ds->d_NeighborsArrays, ds->d_NeighborSizes,
+
+        int PROPERTY_SIZE = ds->sizeOfNodesArrayOnCuda * sizeof(*ds->property_c);
+        int *property_h;
+        property_h = (int *)malloc(PROPERTY_SIZE);
+        if(ds->property[source] == -1)
+        {
+            gpuErrchk(cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
+            property_h[source] = 0;
+            gpuErrchk(cudaMemcpy(ds->property_c, property_h, PROPERTY_SIZE, cudaMemcpyHostToDevice));
+        }
+
+
+        int FRONTIER_SIZE = ds->num_nodes * sizeof(*ds->frontierArr_c);
+        
+        bool* visited_c;
+        gpuErrchk(cudaMalloc((void**)&visited_c, FRONTIER_SIZE));
+        cudaMemset(visited_c, 0, FRONTIER_SIZE);
+
+        // gpuErrchk(cudaMalloc((void**)&ds->affected_c, FRONTIER_SIZE));
+        // gpuErrchk(cudaMemcpy(ds->affected_c, ds->affected.begin(), FRONTIER_SIZE, cudaMemcpyHostToDevice));
+        
+        int NODES_SIZE = ds->num_nodes * sizeof(NodeID);
+        int affectedNum = ds->affectedNodes.size();
+        int* d_affectedNum;
+        gpuErrchk(cudaMalloc(&(d_affectedNum), sizeof(int)));
+        gpuErrchk(cudaMemcpy(d_affectedNum, &(affectedNum), sizeof(int), cudaMemcpyHostToDevice));
+
+        int AFFECTED_SIZE = affectedNum * sizeof(NodeID);
+        NodeID* d_affectedNodes;
+        gpuErrchk(cudaMalloc(&(d_affectedNodes), AFFECTED_SIZE));
+        gpuErrchk(cudaMemcpy(d_affectedNodes, &(ds->affectedNodes[0]), AFFECTED_SIZE, cudaMemcpyHostToDevice));
+        std::cout <<"Running dynamic BFS " << std::endl;
+
+        int* d_frontierNum;
+        gpuErrchk(cudaMalloc(&(d_frontierNum), sizeof(int)));
+        cudaMemset(d_frontierNum, 0, sizeof(int));
+
+        NodeID* d_frontierNodes;
+        gpuErrchk(cudaMalloc(&d_frontierNodes, NODES_SIZE));
+        cudaMemset(d_frontierNodes, 0, NODES_SIZE);
+
+        NodeID* d_newFrontierNodes;
+        gpuErrchk(cudaMalloc(&d_newFrontierNodes, NODES_SIZE));
+        cudaMemset(d_newFrontierNodes, 0, NODES_SIZE);
+        t_cuda.Stop();
+
+        t.Start();
+        const int BLK_SIZE = 512;
+        dim3 blkSize(BLK_SIZE);
+        dim3 gridSize((affectedNum + BLK_SIZE - 1) / BLK_SIZE);
+
+        BFSIter0_cuda<<<gridSize, blkSize>>>(d_affectedNodes, d_affectedNum, d_frontierNum, d_frontierNodes,
+                    d_newFrontierNodes, ds->affected_c, ds->property_c, ds->d_NeighborsArrays, ds->d_NeighborSizes,
                     visited_c, ds->num_nodes, ds->num_edges,
-                    d_frontierExists);
+                    ds->frontierArr_c, d_frontierExists);
 
         cudaDeviceSynchronize();
-        gpuErrchk(cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost));
-
-        swap(d_frontierNum, d_newFrontierNum);
+        cudaMemset(visited_c, 0, FRONTIER_SIZE);
+        
+        // cudaFree(ds->d_InNodes);
+        // cudaFree(ds->d_in_neighbors);
+        // cudaFree(ds->affected_c);
+        cudaFree(d_affectedNodes);
+        cudaFree(d_affectedNum);
+        
+        int frontierNum = 0;
         gpuErrchk(cudaMemcpy(&frontierNum, d_frontierNum, sizeof(int), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost));
+        int* d_newFrontierNum;
+        gpuErrchk(cudaMalloc(&(d_newFrontierNum), sizeof(int)));
         cudaMemset(d_newFrontierNum, 0, sizeof(int));
+        
+        while(h_frontierExists){        
+            h_frontierExists = false;     
+            //std::cout << "Queue not empty, Queue size: " << queue.size() << std::endl;
+            cudaMemset(visited_c, 0, FRONTIER_SIZE);
+            cudaMemset(d_frontierExists, 0, sizeof(bool));
+            gridSize = (frontierNum + BLK_SIZE - 1) / BLK_SIZE;
+            dynBfs_kerenel<<<gridSize, blkSize>>>(d_frontierNum, d_frontierNodes, d_newFrontierNodes, d_newFrontierNum, ds->property_c,  ds->d_NeighborsArrays, ds->d_NeighborSizes,
+                        visited_c, ds->num_nodes, ds->num_edges,
+                        d_frontierExists);
 
-        swap(d_frontierNodes, d_newFrontierNodes);
-        cudaMemset(d_newFrontierNodes, 0, NODES_SIZE);
-    }    
+            cudaDeviceSynchronize();
+            gpuErrchk(cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost));
 
-    gpuErrchk(cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
-    std::copy(property_h, property_h + ds->num_nodes, ds->property.begin());
-    free(property_h);
-    
-    cudaFree(visited_c);
-    cudaFree(d_frontierExists);
+            swap(d_frontierNum, d_newFrontierNum);
+            gpuErrchk(cudaMemcpy(&frontierNum, d_frontierNum, sizeof(int), cudaMemcpyDeviceToHost));
+            cudaMemset(d_newFrontierNum, 0, sizeof(int));
 
-    cudaFree(d_frontierNum);
-    cudaFree(d_frontierNodes);
-    cudaFree(d_newFrontierNodes);
-    cudaFree(d_newFrontierNum);
+            swap(d_frontierNodes, d_newFrontierNodes);
+            cudaMemset(d_newFrontierNodes, 0, NODES_SIZE);
+        }    
 
-    #pragma omp for schedule(dynamic, 16)
-    for(NodeID i = 0; i < ds->num_nodes; i++){
-        ds->affected[i] = false;  
+        gpuErrchk(cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
+        std::copy(property_h, property_h + ds->num_nodes, ds->property.begin());
+        free(property_h);
+        
+        cudaFree(visited_c);
+        cudaFree(d_frontierExists);
+
+        cudaFree(d_frontierNum);
+        cudaFree(d_frontierNodes);
+        cudaFree(d_newFrontierNodes);
+        cudaFree(d_newFrontierNum);
+
+        #pragma omp for schedule(dynamic, 16)
+        for(NodeID i = 0; i < ds->num_nodes; i++){
+            ds->affected[i] = false;  
+        }
+
+        t.Stop();  
+
+        Timer t4_cuda;
+        t4_cuda.Start();
+        #pragma omp for schedule(dynamic, 16)
+        for(NodeID i : ds->affectedNodesSet){
+            ds->out_neighborsDelta[i].clear();  
+        }
+        (ds->affectedNodes).clear();
+        ds->affectedNodesSet.clear();
+        t4_cuda.Stop();
+
+        ofstream out("JustAlg.csv", std::ios_base::app);   
+        out << t.Seconds() << std::endl;    
+        out.close();
+
+        ofstream cuda_out("InitFrontierMisc.csv", std::ios_base::app);   
+        cuda_out << t_cuda.Seconds() << std::endl;    
+        cuda_out.close();
+
+        ofstream cuda1_out("resizeAndCopyToCudaMemory.csv", std::ios_base::app);   
+        cuda1_out << t1Time << std::endl;    
+        cuda1_out.close();
+
+        ofstream cuda2_out("copyToCudaMemory.csv", std::ios_base::app);   
+        cuda2_out << t2Time << std::endl;    
+        cuda2_out.close();
+
+        ofstream cuda3_out("updateNeighbors.csv", std::ios_base::app);   
+        cuda3_out << t3Time << std::endl;    
+        cuda3_out.close();
+
+        ofstream cuda4_out("clearAffected.csv", std::ios_base::app);   
+        cuda4_out << t4_cuda.Seconds() << std::endl;    
+        cuda4_out.close();
+
+        std::cout << "Exiting!" << std::endl;
     }
-
-    t.Stop();  
-
-    Timer t4_cuda;
-    t4_cuda.Start();
-    #pragma omp for schedule(dynamic, 16)
-    for(NodeID i : ds->affectedNodesSet){
-        ds->out_neighborsDelta[i].clear();  
-    }
-    (ds->affectedNodes).clear();
-    ds->affectedNodesSet.clear();
-    t4_cuda.Stop();
-
-    ofstream out("JustAlg.csv", std::ios_base::app);   
-    out << t.Seconds() << std::endl;    
-    out.close();
-
-    ofstream cuda_out("InitFrontierMisc.csv", std::ios_base::app);   
-    cuda_out << t_cuda.Seconds() << std::endl;    
-    cuda_out.close();
-
-    ofstream cuda1_out("resizeAndCopyToCudaMemory.csv", std::ios_base::app);   
-    cuda1_out << t1Time << std::endl;    
-    cuda1_out.close();
-
-    ofstream cuda2_out("copyToCudaMemory.csv", std::ios_base::app);   
-    cuda2_out << t2Time << std::endl;    
-    cuda2_out.close();
-
-    ofstream cuda3_out("updateNeighbors.csv", std::ios_base::app);   
-    cuda3_out << t3Time << std::endl;    
-    cuda3_out.close();
-
-    ofstream cuda4_out("clearAffected.csv", std::ios_base::app);   
-    cuda4_out << t4_cuda.Seconds() << std::endl;    
-    cuda4_out.close();
-
-    std::cout << "Exiting!" << std::endl;
+    ds->cudaNeighborsConditional.notify_all();
 } 
 
 

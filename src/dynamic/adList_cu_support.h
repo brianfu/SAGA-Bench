@@ -76,7 +76,7 @@ void coalesceEdgesAndCopyToCuda(T* ds, bool* copyFullOrDelta)
     dim3 gridSize((ds->affectedNodes.size() + BLK_SIZE - 1) / BLK_SIZE);
     copyToCuda<<<gridSize, blkSize>>>(d_affectedNodes, d_copySize, d_copyFullOrDelta, d_coalesceNeighbors, coalesceSize, ds->affectedNodes.size(), ds->d_NeighborsArrays, ds->d_NeighborSizes);
     cudaDeviceSynchronize();
-    cudaFree(d_coalesceNeighbors);
+    ds->stale_neighbors.push_back(d_coalesceNeighbors);
     cudaFree(d_copySize);
     cudaFree(d_affectedNodes);
     cudaFree(d_copyFullOrDelta);
@@ -150,7 +150,8 @@ void resizeAndCopyToCudaMemory(T* ds)
                     // ds->affectedNodes.push_back(i);
                     if(i < ds->numberOfNodesOnCuda)
                     {
-                        cudaFree(h_array[i]);
+                        Node* tempNeighbors = h_array[i];
+                        ds->stale_neighbors.push_back(tempNeighbors);
                     }
                     if(h_NeighborCapacity[i] < (ds->out_neighbors[i]).size())
                     {
@@ -213,7 +214,10 @@ void copyToCudaMemory(T* ds)
                 if(ds->h_NeighborCapacity[i] < (ds->out_neighbors[i]).size())
                 {
                     if(i < ds->numberOfNodesOnCuda)
-                        cudaFree(ds->h_NeighborsArrays[i]);
+                    {
+                        Node* tempNeighbors = ds->h_NeighborsArrays[i];
+                        ds->stale_neighbors.push_back(tempNeighbors);
+                    }
                     ds->h_NeighborCapacity[i] = ((ds->h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : ds->h_NeighborCapacity[i]) * 2;
                     cudaMalloc(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)));
                     copyFullOrDelta[index] = true;
@@ -271,7 +275,8 @@ void updateNeighbors(T* ds)
                     // ds->h_NeighborsArrays[i] = d_tempNeighbors;
                     // ds->h_NeighborCapacity[i] = temp_Capacity;
                     ds->h_NeighborCapacity[i] = ((ds->h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : ds->h_NeighborCapacity[i]) * 2;
-                    cudaFree(ds->h_NeighborsArrays[i]);
+                    Node* tempNeighbors = ds->h_NeighborsArrays[i];
+                    ds->stale_neighbors.push_back(tempNeighbors);
                     cudaMalloc(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)));
                     flag = true;
                     copyFullOrDelta[index] = true;

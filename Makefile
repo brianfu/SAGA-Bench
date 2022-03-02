@@ -1,10 +1,10 @@
 # See LICENSE.txt for license details.
 
 C = nvcc
-CFLAGS = -Xcompiler -O2 -std=c++11 -w
+CFLAGS = -Xcompiler -O2 -std=c++17 -w
 
 CXX = nvcc
-CXXFLAGS = -Xcompiler -fopenmp -O2 -std=c++11 -w
+CXXFLAGS = -Xcompiler -fopenmp -O2 -std=c++17 -w
 
 DYN_PREFIX := d_
 
