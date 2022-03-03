@@ -78,6 +78,9 @@ class adList_cu: public dataStruc {
       int* d_NeighborSizes;
       int* h_NeighborSizes;
       int* h_NeighborCapacity;
+      std::vector<bool> copyFullOrDelta;
+      std::vector<int> startPosition;
+      std::vector<int> copySize;
 
       std::vector<T*> stale_neighbors;
       std::mutex cudaNeighborsMutex;

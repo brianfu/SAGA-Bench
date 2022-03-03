@@ -5,6 +5,8 @@
 #include "print.h"
 #include "types.h"
 #include <algorithm>
+#include <atomic>
+#include <array>
 
 __global__ void initProperties(int* property, int numNodes)
 {
@@ -19,67 +21,69 @@ __global__ void initProperties(int* property, int numNodes)
     }
 }
 
-__global__ void copyToCuda(NodeID* d_affectedNodes, int* d_copySize, bool* copyFullOrDelta, Node* d_coalesceNeighbors, int coalesceSize, int numAffectedNodes, Node** d_NeighborsArrays, int* d_NeighborSizes)
+__global__ void copyToCuda(NodeID* d_affectedNodes, bool* copyFullOrDelta, Node* d_coalesceNeighbors, int coalesceSize, int numAffectedNodes, Node** d_NeighborsArrays, int* d_NeighborSizes, int* d_startPosition, int* d_copySize)
 {
     int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
     if(idx < numAffectedNodes)
     {
         NodeID node = d_affectedNodes[idx];
-        int copyStart = d_copySize[idx];
-        int copyEnd = (idx + 1) < numAffectedNodes ? d_copySize[idx+1] : coalesceSize;
+        int copyStart = d_startPosition[idx];
+        int numNodes = d_copySize[idx];
         int offset = copyFullOrDelta[idx] ? 0 : d_NeighborSizes[node];
-        memcpy(d_NeighborsArrays[node] + offset, d_coalesceNeighbors + copyStart, (copyEnd - copyStart) * sizeof(Node));
+        memcpy(d_NeighborsArrays[node] + offset, d_coalesceNeighbors + copyStart, numNodes * sizeof(Node));
     }
 }
 
 template <typename T>
-void coalesceEdgesAndCopyToCuda(T* ds, bool* copyFullOrDelta)
+void coalesceEdgesAndCopyToCuda(T* ds, bool* copyFullOrDelta, int* startPosition, int* copySize, int totalSize)
 {
-    std::vector<Node> coalesceNeighbors;
-    std::vector<int> copySize;
+    Node* coalesceNeighbors;
+    cudaMallocHost((void**) &coalesceNeighbors, totalSize * sizeof(Node));
     int numNodes = ds->affectedNodes.size();
-    int start = 0;
+    #pragma omp for schedule(dynamic, 16)
     for(int i=0; i < numNodes; i++)
     {
         NodeID node = ds->affectedNodes[i];
+        int start = startPosition[i];
         if (copyFullOrDelta[i])
         {
-            coalesceNeighbors.insert(coalesceNeighbors.end(), ds->out_neighbors[node].begin(), ds->out_neighbors[node].end());
-            copySize.push_back(start);
-            start += ds->out_neighbors[node].size();
+            std::copy(ds->out_neighbors[node].begin(), ds->out_neighbors[node].end(), coalesceNeighbors + start);
         }
         else
         {
-            coalesceNeighbors.insert(coalesceNeighbors.end(), ds->out_neighborsDelta[node].begin(), ds->out_neighborsDelta[node].end());
-            copySize.push_back(start);
-            start += ds->out_neighborsDelta[node].size();
+            std::copy(ds->out_neighborsDelta[node].begin(), ds->out_neighborsDelta[node].end(), coalesceNeighbors + start);
         }
     }
 
-    int coalesceSize = coalesceNeighbors.size();
+    int coalesceSize = totalSize;
     Node* d_coalesceNeighbors;
     int* d_copySize;
+    int* d_startPosition;
     NodeID* d_affectedNodes;
     bool* d_copyFullOrDelta;
 
     cudaMalloc(&d_coalesceNeighbors, coalesceSize * sizeof(Node));
-    cudaMemcpy(d_coalesceNeighbors, &(coalesceNeighbors[0]), coalesceSize * sizeof(Node), cudaMemcpyHostToDevice);
-    cudaMalloc(&d_copySize, copySize.size() * sizeof(int));
-    cudaMemcpy(d_copySize, &(copySize[0]), copySize.size() * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_coalesceNeighbors, coalesceNeighbors, totalSize * sizeof(Node), cudaMemcpyHostToDevice);
     cudaMalloc(&d_affectedNodes, ds->affectedNodes.size() * sizeof(NodeID));
     cudaMemcpy(d_affectedNodes, &(ds->affectedNodes[0]), ds->affectedNodes.size() * sizeof(NodeID), cudaMemcpyHostToDevice);
     cudaMalloc(&d_copyFullOrDelta, ds->affectedNodes.size() * sizeof(bool));
     cudaMemcpy(d_copyFullOrDelta, copyFullOrDelta, ds->affectedNodes.size() * sizeof(bool), cudaMemcpyHostToDevice);
+    cudaMalloc(&d_startPosition, ds->affectedNodes.size() * sizeof(int));
+    cudaMemcpy(d_startPosition, startPosition, ds->affectedNodes.size() * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMalloc(&d_copySize, ds->affectedNodes.size() * sizeof(int));
+    cudaMemcpy(d_copySize, copySize, ds->affectedNodes.size() * sizeof(int), cudaMemcpyHostToDevice);
 
     const int BLK_SIZE = 512;
     dim3 blkSize(BLK_SIZE);
     dim3 gridSize((ds->affectedNodes.size() + BLK_SIZE - 1) / BLK_SIZE);
-    copyToCuda<<<gridSize, blkSize>>>(d_affectedNodes, d_copySize, d_copyFullOrDelta, d_coalesceNeighbors, coalesceSize, ds->affectedNodes.size(), ds->d_NeighborsArrays, ds->d_NeighborSizes);
+    copyToCuda<<<gridSize, blkSize>>>(d_affectedNodes, d_copyFullOrDelta, d_coalesceNeighbors, coalesceSize, ds->affectedNodes.size(), ds->d_NeighborsArrays, ds->d_NeighborSizes, d_startPosition, d_copySize);
     cudaDeviceSynchronize();
     ds->stale_neighbors.push_back(d_coalesceNeighbors);
     cudaFree(d_copySize);
+    cudaFree(d_startPosition);
     cudaFree(d_affectedNodes);
     cudaFree(d_copyFullOrDelta);
+    cudaFreeHost(coalesceNeighbors);
 }
 
 template <typename T>
@@ -199,18 +203,24 @@ void copyToCudaMemory(T* ds)
         // Node** h_array = (Node**)malloc(NEIGHBORS_POINTERS_SIZE);
         // int* h_NeighborSizes = (int*)malloc(NEIGHBORS_SIZE);
         bool copyFullOrDelta[ds->affectedNodesSet.size()] = {false};
-        int index = 0;
+
+        int copySize[ds->affectedNodesSet.size()] = {0};
+        int startPosition[ds->affectedNodesSet.size()] = {0};
+        std::atomic<int> index(0);
+        std::atomic<int> totalNodesToCopy(0);
 
         // std::copy(h_array, ds->d_NeighborsArrays, NEIGHBORS_POINTERS_SIZE, cudaMemcpyDeviceToHost);
         // cudaMemcpy(h_NeighborSizes, ds->d_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyDeviceToHost);
 
         // ds->numberOfNeighborsOnCuda = 0;
-        // #pragma omp for schedule(dynamic, 16)
+        ds->affectedNodes.resize(ds->affectedNodesSet.size());
+        #pragma omp for schedule(dynamic, 16)
         for(NodeID i : ds->affectedNodesSet) {
         // for(size_t i = 0 ; i < ds->num_nodes ; i++){
             // if(ds->affected[i])
             // {
                 // ds->affectedNodes.push_back(i);
+                int currIndex = std::atomic_fetch_add(&index, 1);
                 if(ds->h_NeighborCapacity[i] < (ds->out_neighbors[i]).size())
                 {
                     if(i < ds->numberOfNodesOnCuda)
@@ -218,23 +228,25 @@ void copyToCudaMemory(T* ds)
                         Node* tempNeighbors = ds->h_NeighborsArrays[i];
                         ds->stale_neighbors.push_back(tempNeighbors);
                     }
+                    copyFullOrDelta[currIndex] = true;
+                    startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighbors[i].size());
+                    copySize[currIndex] = ds->out_neighbors[i].size();
                     ds->h_NeighborCapacity[i] = ((ds->h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : ds->h_NeighborCapacity[i]) * 2;
                     cudaMalloc(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)));
-                    copyFullOrDelta[index] = true;
                     // gpuErrchk(cudaMemcpy(ds->h_NeighborsArrays[i], &((ds->out_neighbors[i])[0]), (ds->out_neighbors[i]).size() * sizeof(Node), cudaMemcpyHostToDevice));
                 }
-                index++;
-                // else
-                // {
-                //     gpuErrchk(cudaMemcpy(ds->h_NeighborsArrays[i] + ds->h_NeighborSizes[i], &((ds->out_neighbors[i])[0]) + ds->h_NeighborSizes[i], ((ds->out_neighbors[i]).size() - ds->h_NeighborSizes[i]) * sizeof(Node), cudaMemcpyHostToDevice));
-                // }
+                else
+                {
+                    startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighborsDelta[i].size());
+                    copySize[currIndex] = ds->out_neighborsDelta[i].size();
+                }
                 ds->h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
-                ds->affectedNodes.push_back(i);
+                ds->affectedNodes[currIndex] = i;
             // }
             // ds->numberOfNeighborsOnCuda += (ds->out_neighbors[i]).size();
         }
         cudaMemcpy(ds->d_NeighborsArrays, ds->h_NeighborsArrays, NEIGHBORS_POINTERS_SIZE, cudaMemcpyHostToDevice);
-        coalesceEdgesAndCopyToCuda(ds, copyFullOrDelta);
+        coalesceEdgesAndCopyToCuda(ds, copyFullOrDelta, startPosition, copySize, totalNodesToCopy.load());
         cudaMemcpy(ds->d_NeighborSizes, ds->h_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyHostToDevice);
 
         ds->numberOfNodesOnCuda = ds->num_nodes;
@@ -257,14 +269,19 @@ void updateNeighbors(T* ds)
         // ds->numberOfNeighborsOnCuda = 0;
         bool flag = false;
         bool copyFullOrDelta[ds->affectedNodesSet.size()] {false};
+        int copySize[ds->affectedNodesSet.size()] = {0};
+        int startPosition[ds->affectedNodesSet.size()] = {0};
 
-        int index = 0;
-        // #pragma omp for schedule(dynamic, 16)
+        std::atomic<int> index(0);
+        std::atomic<int> totalNodesToCopy(0);
+        ds->affectedNodes.resize(ds->affectedNodesSet.size());
+        #pragma omp for schedule(dynamic, 16)
         for(NodeID i : ds->affectedNodesSet) {
         // for(size_t i = 0 ; i < ds->num_nodes ; i++){
             // ds->numberOfNeighborsOnCuda += (ds->out_neighbors[i]).size();
             // if(ds->affected[i])
             // {
+                int currIndex = std::atomic_fetch_add(&index, 1);
                 if(ds->h_NeighborCapacity[i] < (ds->out_neighbors[i]).size())
                 {
                     // Node* d_tempNeighbors;
@@ -279,10 +296,16 @@ void updateNeighbors(T* ds)
                     ds->stale_neighbors.push_back(tempNeighbors);
                     cudaMalloc(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)));
                     flag = true;
-                    copyFullOrDelta[index] = true;
+                    copyFullOrDelta[currIndex] = true;
+                    startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighbors[i].size());
+                    copySize[currIndex] = ds->out_neighbors[i].size();
                 }
-                index++;
-                ds->affectedNodes.push_back(i);
+                else
+                {
+                    startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighborsDelta[i].size());
+                    copySize[currIndex] = ds->out_neighborsDelta[i].size();
+                }
+                ds->affectedNodes[currIndex] = i;
                 // cudaFree(h_array[i]);
                 // cudaMalloc(&h_array[i], (ds->out_neighbors[i]).size() * sizeof(Node));
                 ds->h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
@@ -293,7 +316,7 @@ void updateNeighbors(T* ds)
         {
             cudaMemcpy(ds->d_NeighborsArrays, ds->h_NeighborsArrays, NEIGHBORS_POINTERS_SIZE, cudaMemcpyHostToDevice);
         }
-        coalesceEdgesAndCopyToCuda(ds, copyFullOrDelta);
+        coalesceEdgesAndCopyToCuda(ds, copyFullOrDelta, startPosition, copySize, totalNodesToCopy.load());
         cudaMemcpy(ds->d_NeighborSizes, ds->h_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyHostToDevice);
         ds->numberOfNeighborsOnCuda = ds->num_edges;
     }
