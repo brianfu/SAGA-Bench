@@ -62,27 +62,27 @@ void coalesceEdgesAndCopyToCuda(T* ds, bool* copyFullOrDelta, int* startPosition
     NodeID* d_affectedNodes;
     bool* d_copyFullOrDelta;
 
-    cudaMalloc(&d_coalesceNeighbors, coalesceSize * sizeof(Node));
-    cudaMemcpy(d_coalesceNeighbors, coalesceNeighbors, totalSize * sizeof(Node), cudaMemcpyHostToDevice);
-    cudaMalloc(&d_affectedNodes, ds->affectedNodes.size() * sizeof(NodeID));
-    cudaMemcpy(d_affectedNodes, &(ds->affectedNodes[0]), ds->affectedNodes.size() * sizeof(NodeID), cudaMemcpyHostToDevice);
-    cudaMalloc(&d_copyFullOrDelta, ds->affectedNodes.size() * sizeof(bool));
-    cudaMemcpy(d_copyFullOrDelta, copyFullOrDelta, ds->affectedNodes.size() * sizeof(bool), cudaMemcpyHostToDevice);
-    cudaMalloc(&d_startPosition, ds->affectedNodes.size() * sizeof(int));
-    cudaMemcpy(d_startPosition, startPosition, ds->affectedNodes.size() * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMalloc(&d_copySize, ds->affectedNodes.size() * sizeof(int));
-    cudaMemcpy(d_copySize, copySize, ds->affectedNodes.size() * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMallocAsync(&d_coalesceNeighbors, coalesceSize * sizeof(Node), ds->adListStream);
+    cudaMemcpyAsync(d_coalesceNeighbors, coalesceNeighbors, totalSize * sizeof(Node), cudaMemcpyHostToDevice, ds->adListStream);
+    cudaMallocAsync(&d_affectedNodes, ds->affectedNodes.size() * sizeof(NodeID), ds->adListStream);
+    cudaMemcpyAsync(d_affectedNodes, &(ds->affectedNodes[0]), ds->affectedNodes.size() * sizeof(NodeID), cudaMemcpyHostToDevice, ds->adListStream);
+    cudaMallocAsync(&d_copyFullOrDelta, ds->affectedNodes.size() * sizeof(bool), ds->adListStream);
+    cudaMemcpyAsync(d_copyFullOrDelta, copyFullOrDelta, ds->affectedNodes.size() * sizeof(bool), cudaMemcpyHostToDevice, ds->adListStream);
+    cudaMallocAsync(&d_startPosition, ds->affectedNodes.size() * sizeof(int), ds->adListStream);
+    cudaMemcpyAsync(d_startPosition, startPosition, ds->affectedNodes.size() * sizeof(int), cudaMemcpyHostToDevice, ds->adListStream);
+    cudaMallocAsync(&d_copySize, ds->affectedNodes.size() * sizeof(int), ds->adListStream);
+    cudaMemcpyAsync(d_copySize, copySize, ds->affectedNodes.size() * sizeof(int), cudaMemcpyHostToDevice, ds->adListStream);
 
     const int BLK_SIZE = 512;
     dim3 blkSize(BLK_SIZE);
     dim3 gridSize((ds->affectedNodes.size() + BLK_SIZE - 1) / BLK_SIZE);
-    copyToCuda<<<gridSize, blkSize>>>(d_affectedNodes, d_copyFullOrDelta, d_coalesceNeighbors, coalesceSize, ds->affectedNodes.size(), ds->d_NeighborsArrays, ds->d_NeighborSizes, d_startPosition, d_copySize);
+    copyToCuda<<<gridSize, blkSize, 0, ds->adListStream>>>(d_affectedNodes, d_copyFullOrDelta, d_coalesceNeighbors, coalesceSize, ds->affectedNodes.size(), ds->d_NeighborsArrays, ds->d_NeighborSizes, d_startPosition, d_copySize);
     cudaDeviceSynchronize();
     ds->stale_neighbors.push_back(d_coalesceNeighbors);
-    cudaFree(d_copySize);
-    cudaFree(d_startPosition);
-    cudaFree(d_affectedNodes);
-    cudaFree(d_copyFullOrDelta);
+    cudaFreeAsync(d_copySize, ds->adListStream);
+    cudaFreeAsync(d_startPosition, ds->adListStream);
+    cudaFreeAsync(d_affectedNodes, ds->adListStream);
+    cudaFreeAsync(d_copyFullOrDelta, ds->adListStream);
     cudaFreeHost(coalesceNeighbors);
 }
 
@@ -104,20 +104,20 @@ void resizeAndCopyToCudaMemory(T* ds)
 
         // create top-level device array pointer
         Node** d_array;
-        cudaMalloc((void**)&d_array, NEIGHBORS_POINTERS_SIZE);
+        cudaMallocAsync((void**)&d_array, NEIGHBORS_POINTERS_SIZE, ds->adListStream);
 
         int* d_TempNeighborSizes;
-        cudaMalloc((void**)&d_TempNeighborSizes, NEIGHBORS_SIZE);
+        cudaMallocAsync((void**)&d_TempNeighborSizes, NEIGHBORS_SIZE, ds->adListStream);
 
 
         int* d_TempProperty;
         int PROPERTY_SIZE = newSizeOfNodesArrayOnCuda * sizeof(*ds->property_c);
-        gpuErrchk(cudaMalloc(&d_TempProperty, PROPERTY_SIZE));
+        gpuErrchk(cudaMallocAsync(&d_TempProperty, PROPERTY_SIZE, ds->adListStream));
         
         const int BLK_SIZE = 512;
         dim3 blkSize(BLK_SIZE);
         dim3 gridSize((newSizeOfNodesArrayOnCuda + BLK_SIZE - 1) / BLK_SIZE);
-        initProperties<<<gridSize, blkSize>>>(d_TempProperty, newSizeOfNodesArrayOnCuda);
+        initProperties<<<gridSize, blkSize, 0, ds->adListStream>>>(d_TempProperty, newSizeOfNodesArrayOnCuda);
 
         ds->numberOfNeighborsOnCuda = 0;
         if(ds->sizeOfNodesArrayOnCuda == 0)
@@ -125,8 +125,8 @@ void resizeAndCopyToCudaMemory(T* ds)
             // allocate each device row-pointer, then copy host data to it
             #pragma omp for schedule(dynamic, 16)
             for(size_t i = 0 ; i < ds->num_nodes ; i++){
-                gpuErrchk(cudaMalloc((void**)&h_array[i], (ds->out_neighbors[i]).size() * sizeof(Node) * 2));
-                gpuErrchk(cudaMemcpyAsync(h_array[i], &(((ds->out_neighbors)[i])[0]), (ds->out_neighbors[i]).size() * sizeof(Node), cudaMemcpyHostToDevice));
+                gpuErrchk(cudaMallocAsync((void**)&h_array[i], (ds->out_neighbors[i]).size() * sizeof(Node) * 2, ds->adListStream));
+                gpuErrchk(cudaMemcpyAsync(h_array[i], &(((ds->out_neighbors)[i])[0]), (ds->out_neighbors[i]).size() * sizeof(Node), cudaMemcpyHostToDevice, ds->adListStream));
                 h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
                 h_NeighborCapacity[i] = (ds->out_neighbors[i]).size() * 2;
 
@@ -161,25 +161,26 @@ void resizeAndCopyToCudaMemory(T* ds)
                     {
                         h_NeighborCapacity[i] = ((h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : h_NeighborCapacity[i]) * 2;
                     }
-                    cudaMalloc(&h_array[i], (h_NeighborCapacity[i] * sizeof(Node)));
-                    gpuErrchk(cudaMemcpyAsync(h_array[i], &((ds->out_neighbors[i])[0]), (ds->out_neighbors[i]).size() * sizeof(Node), cudaMemcpyHostToDevice));
+                    cudaMallocAsync(&h_array[i], (h_NeighborCapacity[i] * sizeof(Node)), ds->adListStream);
+                    gpuErrchk(cudaMemcpyAsync(h_array[i], &((ds->out_neighbors[i])[0]), (ds->out_neighbors[i]).size() * sizeof(Node), cudaMemcpyHostToDevice, ds->adListStream));
                     h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
                 // }
                 // ds->numberOfNeighborsOnCuda += (ds->out_neighbors[i]).size();
             }
-            cudaFree(ds->d_NeighborsArrays);
-            cudaFree(ds->d_NeighborSizes);
+            cudaStreamSynchronize(ds->adListStream);
+            cudaFreeAsync(ds->d_NeighborsArrays, ds->adListStream);
+            cudaFreeAsync(ds->d_NeighborSizes, ds->adListStream);
             free(ds->h_NeighborSizes);
             free(ds->h_NeighborCapacity);
             free(ds->h_NeighborsArrays);
 
-            gpuErrchk(cudaMemcpyAsync(d_TempProperty, ds->property_c, ds->sizeOfNodesArrayOnCuda * sizeof(*(ds->property_c)), cudaMemcpyDeviceToDevice));
-            cudaFree(ds->property_c);
+            gpuErrchk(cudaMemcpyAsync(d_TempProperty, ds->property_c, ds->sizeOfNodesArrayOnCuda * sizeof(*(ds->property_c)), cudaMemcpyDeviceToDevice, ds->adListStream));
+            cudaFreeAsync(ds->property_c, ds->adListStream);
         }
         // fixup top level device array pointer to point to array of device row-pointers
-        cudaMemcpy(d_array, h_array, NEIGHBORS_POINTERS_SIZE, cudaMemcpyHostToDevice);
+        cudaMemcpyAsync(d_array, h_array, NEIGHBORS_POINTERS_SIZE, cudaMemcpyHostToDevice, ds->adListStream);
 
-        cudaMemcpy(d_TempNeighborSizes, h_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyHostToDevice);
+        cudaMemcpyAsync(d_TempNeighborSizes, h_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyHostToDevice, ds->adListStream);
 
         ds->h_NeighborsArrays = h_array;
         ds->h_NeighborSizes = h_NeighborSizes;
@@ -232,7 +233,7 @@ void copyToCudaMemory(T* ds)
                     startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighbors[i].size());
                     copySize[currIndex] = ds->out_neighbors[i].size();
                     ds->h_NeighborCapacity[i] = ((ds->h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : ds->h_NeighborCapacity[i]) * 2;
-                    cudaMalloc(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)));
+                    cudaMallocAsync(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)), ds->adListStream);
                     // gpuErrchk(cudaMemcpy(ds->h_NeighborsArrays[i], &((ds->out_neighbors[i])[0]), (ds->out_neighbors[i]).size() * sizeof(Node), cudaMemcpyHostToDevice));
                 }
                 else
@@ -245,9 +246,9 @@ void copyToCudaMemory(T* ds)
             // }
             // ds->numberOfNeighborsOnCuda += (ds->out_neighbors[i]).size();
         }
-        cudaMemcpy(ds->d_NeighborsArrays, ds->h_NeighborsArrays, NEIGHBORS_POINTERS_SIZE, cudaMemcpyHostToDevice);
+        cudaMemcpyAsync(ds->d_NeighborsArrays, ds->h_NeighborsArrays, NEIGHBORS_POINTERS_SIZE, cudaMemcpyHostToDevice, ds->adListStream);
         coalesceEdgesAndCopyToCuda(ds, copyFullOrDelta, startPosition, copySize, totalNodesToCopy.load());
-        cudaMemcpy(ds->d_NeighborSizes, ds->h_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyHostToDevice);
+        cudaMemcpyAsync(ds->d_NeighborSizes, ds->h_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyHostToDevice, ds->adListStream);
 
         ds->numberOfNodesOnCuda = ds->num_nodes;
         ds->numberOfNeighborsOnCuda = ds->num_edges;
@@ -294,7 +295,7 @@ void updateNeighbors(T* ds)
                     ds->h_NeighborCapacity[i] = ((ds->h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : ds->h_NeighborCapacity[i]) * 2;
                     Node* tempNeighbors = ds->h_NeighborsArrays[i];
                     ds->stale_neighbors.push_back(tempNeighbors);
-                    cudaMalloc(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)));
+                    cudaMallocAsync(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)), ds->adListStream);
                     flag = true;
                     copyFullOrDelta[currIndex] = true;
                     startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighbors[i].size());
@@ -314,10 +315,10 @@ void updateNeighbors(T* ds)
 
         if(flag)
         {
-            cudaMemcpy(ds->d_NeighborsArrays, ds->h_NeighborsArrays, NEIGHBORS_POINTERS_SIZE, cudaMemcpyHostToDevice);
+            cudaMemcpyAsync(ds->d_NeighborsArrays, ds->h_NeighborsArrays, NEIGHBORS_POINTERS_SIZE, cudaMemcpyHostToDevice, ds->adListStream);
         }
         coalesceEdgesAndCopyToCuda(ds, copyFullOrDelta, startPosition, copySize, totalNodesToCopy.load());
-        cudaMemcpy(ds->d_NeighborSizes, ds->h_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyHostToDevice);
+        cudaMemcpyAsync(ds->d_NeighborSizes, ds->h_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyHostToDevice, ds->adListStream);
         ds->numberOfNeighborsOnCuda = ds->num_edges;
     }
 }

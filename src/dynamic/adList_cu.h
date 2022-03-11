@@ -86,6 +86,8 @@ class adList_cu: public dataStruc {
       std::mutex cudaNeighborsMutex;
       std::condition_variable cudaNeighborsConditional;
       bool isAlive;
+
+      cudaStream_t adListStream;
 };
 
 // template <typename T>
@@ -111,11 +113,13 @@ inline void adList_cu<Node>::freeStaleArrays()
     { 
         {
             std::unique_lock<std::mutex> lock(cudaNeighborsMutex);
-            #pragma omp for schedule(dynamic, 16)
+            // #pragma omp for schedule(dynamic, 16)
             for(int i = 0; i < stale_neighbors.size(); i++)
             {
-                cudaFree(stale_neighbors[i]);
+                cudaFreeAsync(stale_neighbors[i], adListStream);
             }
+            // cudaStreamSynchronize(adListStream);
+            gpuErrchk(cudaDeviceSynchronize());
             stale_neighbors.clear();
             cudaNeighborsConditional.wait(lock);
         }
@@ -131,6 +135,7 @@ inline adList_cu<T>::adList_cu(bool w, bool d)
 template <>
 inline adList_cu<Node>::adList_cu(bool w, bool d)
     : dataStruc(w, d), sizeOfNodesArrayOnCuda(0), isAlive(true) {
+        cudaStreamCreate(&adListStream); 
         std::thread cudaFreeWorker(&adList_cu<Node>::freeStaleArrays, this);
         cudaFreeWorker.detach();
          /*std::cout << "Creating AdList" << std::endl;*/ }    
@@ -156,6 +161,8 @@ adList_cu<T>::~adList_cu()
         isAlive = false;
         cudaNeighborsConditional.notify_all();
     }
+    cudaStreamDestroy(adListStream);
+    cudaDeviceReset();
 }
 
 template <typename T>
