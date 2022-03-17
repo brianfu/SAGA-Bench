@@ -82,23 +82,24 @@ public:
 			//     return traverseAlg(ds8);
 		} else if (alg == "prfromscratch") {
 	    	if (is_adList && ds->weighted)
-				return PRStartFromScratch(ds0);
-	    	else if (is_adList && !ds->weighted)
-				return PRStartFromScratch(ds1);
-	    	else if (is_rhh && ds->weighted)
-				return PRStartFromScratch(ds2);
-	   		else if (is_rhh && !ds->weighted)
-				return PRStartFromScratch(ds3);
-	    	else if (is_stinger)
-				return PRStartFromScratch(ds4);
-	    	else if (is_adList2 && ds->weighted)
-				return PRStartFromScratch(ds5);
-	    	else if (is_adList2 && !ds->weighted)
-				return PRStartFromScratch(ds6);	
+				return;
+				// return PRStartFromScratch(ds0);
+	    	// else if (is_adList && !ds->weighted)
+			// 	return PRStartFromScratch(ds1);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return PRStartFromScratch(ds2);
+	   		// else if (is_rhh && !ds->weighted)
+			// 	return PRStartFromScratch(ds3);
+	    	// else if (is_stinger)
+			// 	return PRStartFromScratch(ds4);
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return PRStartFromScratch(ds5);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return PRStartFromScratch(ds6);	
 			// else if (is_adListST && ds->weighted)
             //     return PRStartFromScratch(ds7);
-			// else if (is_adListST && !ds->weighted) 
-			//     return PRStartFromScratch(ds8);    
+			else if (is_adListST && !ds->weighted) 
+			    return PRStartFromScratch(ds8);    
 		} else if (alg == "prdyn") {
 	    	if (is_adList && ds->weighted)
 				return dynPRAlg(ds0);

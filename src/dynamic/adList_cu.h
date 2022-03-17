@@ -34,6 +34,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, int i, bool 
 #include <condition_variable>
 #include <thread>
 
+typedef float Rank;
 
 // T can be either node or nodeweight
 template <typename T>
@@ -48,6 +49,7 @@ class adList_cu: public dataStruc {
     public: 
       
       int* property_c; 
+      Rank* propertyF_c; 
       bool* frontierArr_c;
       bool* affected_c;
       NodeID* h_nodes;
