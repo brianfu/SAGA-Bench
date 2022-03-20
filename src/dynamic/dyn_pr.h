@@ -64,6 +64,7 @@ void dynPRAlg(T* ds)
 
     SlidingQueue<NodeID> queue(ds->num_nodes);       
     const Rank base_score = (1.0f - kDamp)/(ds->num_nodes); 
+    int max_iters = 10;
     // set all new vertices' rank to 1/num_nodes, otherwise reuse old values 
 #pragma omp parallel for schedule(dynamic, 64)
     for (NodeID n = 0; n < ds->num_nodes; n++) {
@@ -81,7 +82,8 @@ void dynPRAlg(T* ds)
     std::cout << "Queue Size: " << queue.size() << std::endl;
     out.close();*/
     // Iteration 1 onward, process vertices in the queue 
-    while (!queue.empty()) {         
+    int iter = 0;
+    while (!queue.empty() && iter < max_iters) {         
         //std::cout << "Not empty queue, Queue Size:" << queue.size() << std::endl;
         pvector<Rank> outgoing_contrib(ds->num_nodes, 0);
         pvector<bool> visited(ds->num_nodes, false); 
@@ -115,7 +117,8 @@ void dynPRAlg(T* ds)
             }
             lqueue.flush();
         }
-        queue.slide_window();               
+        queue.slide_window();          
+        iter++;
     }   
     
     // clear affected array to get ready for the next update round
