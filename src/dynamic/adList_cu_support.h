@@ -36,6 +36,21 @@ static __inline__ __device__ bool atomic_CAS(bool *address, bool compare, bool v
     return current_value;
 }
 
+void getFrontier(bool* visited, int numNodes, int* frontierNum, NodeID* frontierNodes)
+{
+    std::vector<NodeID> newFrontier;
+
+    for(NodeID i = 0; i < numNodes; i++)
+    {
+        if(visited[i])
+        {
+            newFrontier.push_back(i);
+        }
+    }
+    *frontierNum = newFrontier.size();
+    cudaMemcpy(frontierNodes, &(newFrontier[0]), (*frontierNum) * sizeof(NodeID), cudaMemcpyHostToDevice);
+}
+
 __device__ float atomicCAS_f32(float *p, float cmp, float val)
 {
     return __int_as_float(atomicCAS((int* ) p, __float_as_int(cmp), __float_as_int(val)));
