@@ -8,16 +8,47 @@
 #include <atomic>
 #include <array>
 
-__global__ void initProperties(int* property, int numNodes)
+// From https://stackoverflow.com/questions/62091548/atomiccas-for-bool-implementation
+static __inline__ __device__ bool atomic_CAS(bool *address, bool compare, bool val)
+{
+    unsigned long long addr = (unsigned long long)address;
+    unsigned pos = addr & 3;  // byte position within the int
+    int *int_addr = (int *)(addr - pos);  // int-aligned address
+    int old = *int_addr, assumed, ival;
+
+    bool current_value;
+
+    do
+    {
+        current_value = (bool)(old & ((0xFFU) << (8 * pos)));
+
+        if(current_value != compare) // If we expected that bool to be different, then
+            break; // stop trying to update it and just return it's current value
+
+        assumed = old;
+        if(val)
+            ival = old | (1 << (8 * pos));
+        else
+            ival = old & (~((0xFFU) << (8 * pos)));
+        old = atomicCAS(int_addr, assumed, ival);
+    } while(assumed != old);
+
+    return current_value;
+}
+
+__device__ float atomicCAS_f32(float *p, float cmp, float val)
+{
+    return __int_as_float(atomicCAS((int* ) p, __float_as_int(cmp), __float_as_int(val)));
+}
+
+__global__ void initProperties(float* property, int numNodes)
 {
     int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
     int stride = blockDim.x * gridDim.x;
-    int curr;
 
     for(int i = idx; i < numNodes; i+=stride)
     {
         property[i] = -1;
-        curr = property[i];
     }
 }
 
@@ -110,7 +141,7 @@ void resizeAndCopyToCudaMemory(T* ds)
         cudaMallocAsync((void**)&d_TempNeighborSizes, NEIGHBORS_SIZE, ds->adListStream);
 
 
-        int* d_TempProperty;
+        float* d_TempProperty;
         int PROPERTY_SIZE = newSizeOfNodesArrayOnCuda * sizeof(*ds->property_c);
         gpuErrchk(cudaMallocAsync(&d_TempProperty, PROPERTY_SIZE, ds->adListStream));
         

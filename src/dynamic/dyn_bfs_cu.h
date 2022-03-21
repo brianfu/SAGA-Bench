@@ -19,45 +19,17 @@
 
 #include <stdio.h>
 
-// From https://stackoverflow.com/questions/62091548/atomiccas-for-bool-implementation
-static __inline__ __device__ bool atomic_CAS(bool *address, bool compare, bool val)
-{
-    unsigned long long addr = (unsigned long long)address;
-    unsigned pos = addr & 3;  // byte position within the int
-    int *int_addr = (int *)(addr - pos);  // int-aligned address
-    int old = *int_addr, assumed, ival;
-
-    bool current_value;
-
-    do
-    {
-        current_value = (bool)(old & ((0xFFU) << (8 * pos)));
-
-        if(current_value != compare) // If we expected that bool to be different, then
-            break; // stop trying to update it and just return it's current value
-
-        assumed = old;
-        if(val)
-            ival = old | (1 << (8 * pos));
-        else
-            ival = old & (~((0xFFU) << (8 * pos)));
-        old = atomicCAS(int_addr, assumed, ival);
-    } while(assumed != old);
-
-    return current_value;
-}
-
 /* Algorithm: Incremental BFS and BFS starting from scratch */
-__global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* d_frontierNum, NodeID* d_frontierNodes, NodeID* d_newFrontierNodes, bool* affected, int* property, Node** d_NeighborsArrays, int* d_NeighborSizes,
+__global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* d_frontierNum, NodeID* d_frontierNodes, NodeID* d_newFrontierNodes, bool* affected, float* property, Node** d_NeighborsArrays, int* d_NeighborSizes,
                     bool* visited, int64_t numNodes, int64_t numEdges,
                     bool* frontierArr, bool* frontierExists) {
     int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
-    const int MAX = 2147483600;
+    const float MAX = 214748;
     if (idx < *d_affectedNum)
     {
         NodeID node = d_affectedNodes[idx];
         // if(affected[idx]){
-            int old_depth = property[node];
+            float old_depth = property[node];
             int newDepth = MAX;
             // Not using in-neghibors because graph being tested is not directed
             // int iEnd = (idx + 1) < numNodes ? d_InNodes[idx+1] : numEdges;
@@ -66,7 +38,7 @@ __global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* 
             for(int i = 0; i < iEnd; i++)
             {
                 NodeID v = d_NeighborsArrays[node][i].node;
-                int neighborDepth = property[v];
+                float neighborDepth = property[v];
                 if (neighborDepth != -1)
                 {
                     newDepth = newDepth <  (neighborDepth + 1) ? newDepth : (neighborDepth + 1);
@@ -87,8 +59,8 @@ __global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* 
                 for(int j = 0; j < iOutEnd; j++)
                 {
                     NodeID v = d_NeighborsArrays[node][j].node; 
-                    int curr_depth = property[v];
-                    int updated_depth = newDepth + 1;
+                    float curr_depth = property[v];
+                    float updated_depth = newDepth + 1;
                     if((updated_depth < curr_depth) || (curr_depth == -1)){
                         bool curr_val = visited[v];
                         int currPos = *d_frontierNum;
@@ -101,8 +73,10 @@ __global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* 
                                 d_frontierNodes[currPos] = v;
                             }
                         }
-                        while(!(curr_depth == atomicCAS(&property[v], curr_depth, updated_depth))){
+                        // float diff = updated_depth - curr_depth;
+                        while(!(curr_depth == atomicCAS_f32(&property[v], curr_depth, updated_depth))){
                             curr_depth = property[v];
+                            // diff = updated_depth - curr_depth;
                             if(curr_depth <= updated_depth){
                                 break;
                             }
@@ -189,7 +163,7 @@ __global__ void BFSIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* 
 //     }   
 // }
 
-__global__ void dynBfs_kerenel(int* d_frontierNum, NodeID* d_frontierNodes, NodeID* d_newFrontierNodes, int* d_newFrontierNum, int* property, Node** d_NeighborsArrays, int* d_NeighborSizes,
+__global__ void dynBfs_kerenel(int* d_frontierNum, NodeID* d_frontierNodes, NodeID* d_newFrontierNodes, int* d_newFrontierNum, float* property, Node** d_NeighborsArrays, int* d_NeighborSizes,
                     bool* visited_c, int64_t num_nodes, int64_t num_edges,
                     bool* frontierExists){
     int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
@@ -199,8 +173,8 @@ __global__ void dynBfs_kerenel(int* d_frontierNum, NodeID* d_frontierNodes, Node
         for(int i = 0; i < iEnd; i++)
         {
             NodeID v = d_NeighborsArrays[node][i].node; 
-            int curr_depth = property[v];
-            int updated_depth = property[node] + 1;
+            float curr_depth = property[v];
+            float updated_depth = property[node] + 1;
             if((updated_depth < curr_depth) || (curr_depth == -1)){
                 bool curr_val = visited_c[v];
                 if(!(*frontierExists))
@@ -217,8 +191,11 @@ __global__ void dynBfs_kerenel(int* d_frontierNum, NodeID* d_frontierNodes, Node
                         d_newFrontierNodes[currPos] = v;
                     }
                 }
-                while(!(curr_depth == atomicCAS(&property[v], curr_depth, updated_depth))){
+
+                // float diff = updated_depth - curr_depth; 
+                while(!(curr_depth == atomicCAS_f32(&property[v], curr_depth, updated_depth))){
                     curr_depth = property[v];
+                    // diff = updated_depth - curr_depth;
                     if(curr_depth <= updated_depth){
                         break;
                     }
@@ -230,6 +207,7 @@ __global__ void dynBfs_kerenel(int* d_frontierNum, NodeID* d_frontierNodes, Node
 
 template<typename T>
 void dynBFSAlg(T* ds, NodeID source){
+        std::cout <<"Running dynamic BFS " << std::endl;
         Timer t;
         Timer t_cuda;
         t_cuda.Start();
@@ -276,8 +254,8 @@ void dynBFSAlg(T* ds, NodeID source){
 
         cudaStreamSynchronize(ds->adListStream);
         int PROPERTY_SIZE = ds->sizeOfNodesArrayOnCuda * sizeof(*ds->property_c);
-        int *property_h;
-        property_h = (int *)malloc(PROPERTY_SIZE);
+        float *property_h;
+        property_h = (float *)malloc(PROPERTY_SIZE);
         if(ds->property[source] == -1)
         {
             gpuErrchk(cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
@@ -305,7 +283,6 @@ void dynBFSAlg(T* ds, NodeID source){
         NodeID* d_affectedNodes;
         gpuErrchk(cudaMallocAsync(&(d_affectedNodes), AFFECTED_SIZE, ds->adListStream));
         gpuErrchk(cudaMemcpyAsync(d_affectedNodes, &(ds->affectedNodes[0]), AFFECTED_SIZE, cudaMemcpyHostToDevice, ds->adListStream));
-        // std::cout <<"Running dynamic BFS " << std::endl;
 
         int* d_frontierNum;
         gpuErrchk(cudaMallocAsync(&(d_frontierNum), sizeof(int), ds->adListStream));
@@ -369,8 +346,8 @@ void dynBFSAlg(T* ds, NodeID source){
         }    
 
         cudaStreamSynchronize(ds->adListStream);
-        gpuErrchk(cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
-        std::copy(property_h, property_h + ds->num_nodes, ds->property.begin());
+        gpuErrchk(cudaMemcpy(&(ds->property[0]), ds->property_c, ds->num_nodes * sizeof(*ds->property_c), cudaMemcpyDeviceToHost));
+        // std::copy(property_h, property_h + ds->num_nodes, ds->property.begin());
         free(property_h);
         
         cudaFreeAsync(visited_c, ds->adListStream);
@@ -440,7 +417,7 @@ void swap(bool* &a, bool* &b){
   b = temp;
 }
 
-__global__ void bfs_kerenel(NodeID *nodes, NodeID *d_out_neighbors, bool *frontierArr, bool *newFrontierArr, int *property, bool* frontierExists, int64_t numNodes, int64_t numEdges, int level)
+__global__ void bfs_kerenel(NodeID *nodes, NodeID *d_out_neighbors, bool *frontierArr, bool *newFrontierArr, float *property, bool* frontierExists, int64_t numNodes, int64_t numEdges, int level)
 {
     int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
     if (idx < numNodes)
@@ -452,7 +429,7 @@ __global__ void bfs_kerenel(NodeID *nodes, NodeID *d_out_neighbors, bool *fronti
             {
                 if (property[d_out_neighbors[i]] == -1)
                 {
-                    atomicCAS(&property[d_out_neighbors[i]], -1, level);
+                    atomicAdd(&property[d_out_neighbors[i]], (float)(level + 1));
                     atomic_CAS(&newFrontierArr[d_out_neighbors[i]], false, true);
                     if(!(*frontierExists))
                     {
@@ -481,8 +458,8 @@ void BFSStartFromScratch(T* ds, NodeID source){
 
     int PROPERTY_SIZE = ds->num_nodes * sizeof(*ds->property_c);
     gpuErrchk(cudaMalloc(&ds->property_c, PROPERTY_SIZE));
-    int *property_h;
-    property_h = (int *)malloc(PROPERTY_SIZE);
+    float *property_h;
+    property_h = (float *)malloc(PROPERTY_SIZE);
     std::fill(property_h, property_h + ds->num_nodes, -1);
     property_h[source] = 0;
     gpuErrchk(cudaMemcpy(ds->property_c, property_h, PROPERTY_SIZE, cudaMemcpyHostToDevice));
@@ -563,8 +540,8 @@ void BFSStartFromScratch(T* ds, NodeID source){
     out << t.Seconds() << std::endl;    
     out.close();
 
-    gpuErrchk(cudaMemcpy(property_h, ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
-    std::copy(property_h, property_h + ds->num_nodes, ds->property.begin());
+    gpuErrchk(cudaMemcpy(&(ds->property[0]), ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost));
+    // std::copy(property_h, property_h + ds->num_nodes, ds->property.begin());
     
     cudaFree(d_frontierExists);
     cudaFree(ds->property_c);

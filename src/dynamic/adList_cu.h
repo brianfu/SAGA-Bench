@@ -48,7 +48,7 @@ class adList_cu: public dataStruc {
       
     public: 
       
-      int* property_c; 
+      float* property_c; 
       Rank* propertyF_c; 
       bool* frontierArr_c;
       bool* affected_c;
