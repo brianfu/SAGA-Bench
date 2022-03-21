@@ -10,6 +10,7 @@
 #include <numeric>
 
 #include "adList_cu.h"
+#include "adList_cu_support.h"
 
 /* Algorithm: Incremental PageRank and PageRank starting from scratch */
 
@@ -17,63 +18,136 @@
 __device__ __host__ const float kDamp = 0.85;
 __device__ __host__ const float PRThreshold = 0.0000001;  
 
-template<typename T> 
-void PRIter0(T* ds, SlidingQueue<NodeID>& queue, Rank base_score)
-{   
-    pvector<Rank> outgoing_contrib(ds->num_nodes, 0);
-    pvector<bool> visited(ds->num_nodes, false);
-#pragma omp parallel for schedule(dynamic, 64)
-    for(NodeID n=0; n < ds->num_nodes; n++) {    
-        outgoing_contrib[n] = ds->property[n] / (ds->out_degree(n));      
-    }
-
-#pragma omp parallel     
+__global__ void PRIter0_cuda(NodeID* d_affectedNodes, int* d_affectedNum, int* d_frontierNum, NodeID* d_frontierNodes, NodeID* d_newFrontierNodes, bool* affected, Rank* property, Node** d_NeighborsArrays, int* d_NeighborSizes,
+                    bool* visited, int64_t numNodes, int64_t numEdges,
+                    bool* frontierArr, bool* frontierExists, Rank* outgoing_contrib, Rank base_score) {
+    int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
+    if (idx < *d_affectedNum)
     {
-        QueueBuffer<NodeID> lqueue(queue);
-#pragma omp for schedule(dynamic, 64)
-        for (NodeID n=0; n < ds->num_nodes; n++) {
-            if (ds->affected[n]) {
-                Rank old_rank = ds->property[n];
-                Rank incoming_total = 0;
-                for(auto v: in_neigh(n, ds)){
-                    incoming_total += outgoing_contrib[v];
+        NodeID node = d_affectedNodes[idx];
+        Rank old_rank = property[node];
+        Rank incoming_total = 0;
+        // Not using in-neghibors because graph being tested is not directed
+        // int iEnd = (idx + 1) < numNodes ? d_InNodes[idx+1] : numEdges;
+        // for(int i = d_InNodes[idx]; i < iEnd; i++)
+        int iEnd = d_NeighborSizes[node];
+        for(int i = 0; i < iEnd; i++)
+        {
+            NodeID v = d_NeighborsArrays[node][i].node;
+            incoming_total += outgoing_contrib[v];
+        }
+        Rank new_rank = base_score + kDamp * incoming_total;
+        property[node] = new_rank;
+
+        bool trigger = fabsf(new_rank - old_rank) > PRThreshold;
+
+        if(trigger){
+            if(!(*frontierExists))
+            {
+                atomic_CAS(frontierExists, false, true);
+            }
+            for(int j = 0; j < iEnd; j++)
+            {
+                NodeID v = d_NeighborsArrays[node][j].node; 
+                bool curr_val = visited[v];
+                if(!curr_val){
+                    atomic_CAS(&visited[v], curr_val, true);
                 }
-                    
-                ds->property[n] = base_score + kDamp * incoming_total;                      
-                bool trigger = fabs(ds->property[n] - old_rank) > PRThreshold; 
-                if (trigger) {
-                    //put the out-neighbors into active list 
-                    for (auto v: out_neigh(n, ds)) {                        
-                        bool curr_val = visited[v];
-                        if (!curr_val) {
-                            if (compare_and_swap(visited[v], curr_val, true)) 
-				lqueue.push_back(v);
-                        }
-                    }                                             
-                }    
             }
         }
-        lqueue.flush();
-    }    
+    }
+}
+
+__global__ void dynPr_kerenel(int* d_frontierNum, NodeID* d_frontierNodes, NodeID* d_newFrontierNodes, int* d_newFrontierNum, Rank* property, Rank* outgoing_contrib, Node** d_NeighborsArrays, int* d_NeighborSizes,
+                    bool* visited_c, int64_t num_nodes, int64_t num_edges,
+                    bool* frontierExists, Rank base_score){
+    int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
+    if(idx < *d_frontierNum){
+        NodeID node = d_frontierNodes[idx];
+        Rank old_rank = property[node];
+        Rank incoming_total = 0;
+        int iEnd = d_NeighborSizes[node];
+        for(int i = 0; i < iEnd; i++)
+        {
+            NodeID v = d_NeighborsArrays[node][i].node; 
+            incoming_total += outgoing_contrib[v];
+        }
+        Rank new_rank = base_score + kDamp * incoming_total;
+        property[node] = new_rank;
+        bool trigger = fabsf(new_rank - old_rank) > PRThreshold;
+        if (trigger)
+        {
+            if(!(*frontierExists))
+            {
+                atomic_CAS(frontierExists, false, true);
+            }
+            for(int i = 0; i < iEnd; i++)
+            {
+                NodeID v = d_NeighborsArrays[node][i].node;
+                bool curr_val = visited_c[v];
+                if(!curr_val){
+                    atomic_CAS(&visited_c[v], curr_val, true);
+                }
+            }
+        }
+    }
+}
+
+__global__ void initPropertiesDyn(Rank* property, int numNodes, Rank value)
+{
+    int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
+    int stride = blockDim.x * gridDim.x;
+
+    for(int i = idx; i < numNodes; i+=stride)
+    {
+        if (property[i] == -1)
+            property[i] = value;
+    }
+}
+
+__global__ void updateOutgoingContribDyn(Rank* outgoing_contrib, Rank* property, int64_t numNodes, int* d_NeighborSizes)
+{
+    int idx = threadIdx.x+ (blockDim.x*blockIdx.x);
+    int stride = blockDim.x * gridDim.x;
+
+    for(int i = idx; i < numNodes; i+=stride)
+    {
+        outgoing_contrib[i] = property[i] / d_NeighborSizes[i];
+    }
 }
 
 template<typename T>
 void dynPRAlg(T* ds)
 {     
-//     std::cout << "Running dynamic PR" << std::endl;  
+    std::cout << "Running dynamic PR" << std::endl;  
 
-//     Timer t;
-//     t.Start();
+    Timer t_cuda;
+    t_cuda.Start();
+    {
+        std::scoped_lock lock(ds->cudaNeighborsMutex);
 
-//     SlidingQueue<NodeID> queue(ds->num_nodes);       
-//     const Rank base_score = (1.0f - kDamp)/(ds->num_nodes); 
-//     // set all new vertices' rank to 1/num_nodes, otherwise reuse old values 
-// #pragma omp parallel for schedule(dynamic, 64)
-//     for (NodeID n = 0; n < ds->num_nodes; n++) {
-//         if (ds->property[n] == -1) {
-//             ds->property[n] = 1.0f/(ds->num_nodes);
-//         }
-//     } 
+        if(ds->sizeOfNodesArrayOnCuda < ds->num_nodes)
+        {
+            // t1_cuda.Start();
+            resizeAndCopyToCudaMemory(ds);
+            // t1_cuda.Stop();
+            // t1Time = t1_cuda.Seconds();
+        }
+        else if(ds->numberOfNodesOnCuda < ds->num_nodes)
+        {
+            // t2_cuda.Start();
+            copyToCudaMemory(ds);
+            // t2_cuda.Stop();
+            // t2Time = t2_cuda.Seconds();
+        }
+        else
+        {
+            // t3_cuda.Start();
+            updateNeighbors(ds);
+            // t3_cuda.Stop();
+            // t3Time = t3_cuda.Seconds();
+        }
+        cudaDeviceSynchronize();
 
 //     // Iteration 0 only on affected vertices    
 //     PRIter0(ds, queue, base_score); 
@@ -120,19 +194,141 @@ void dynPRAlg(T* ds)
 //         }
 //         queue.slide_window();               
 //     }   
->>>>>>> Changes for Page Rank From Scratch
-    
-//     // clear affected array to get ready for the next update round
-// #pragma omp parallel for schedule(dynamic, 64)
-//     for (NodeID i = 0; i < ds->num_nodes; i++) {
-//         ds->affected[i] = false;
-//     }
+        bool *d_frontierExists = nullptr;
+        gpuErrchk(cudaMallocAsync((void**)&d_frontierExists, sizeof(bool), ds->adListStream));
+        bool h_frontierExists = false;
+        cudaMemsetAsync(d_frontierExists, 0, sizeof(bool), ds->adListStream);
 
-//      t.Stop();    
-//     ofstream out("Alg.csv", std::ios_base::app);   
-//     out << t.Seconds() << std::endl;    
-//     out.close();
-//     //cout << "Done" << endl;    
+        const Rank base_score = (1.0f - kDamp)/(ds->num_nodes);
+        int max_iters = 10;
+
+        ds->affectedNodes.assign(ds->affectedNodesSet.begin(), ds->affectedNodesSet.end());
+
+        int FRONTIER_SIZE = ds->num_nodes * sizeof(*ds->frontierArr_c);
+        
+        bool* visited_c;
+        gpuErrchk(cudaMallocAsync((void**)&visited_c, FRONTIER_SIZE, ds->adListStream));
+        cudaMemsetAsync(visited_c, 0, FRONTIER_SIZE, ds->adListStream);
+
+        bool* h_visited;
+        gpuErrchk(cudaMallocHost((void**)&h_visited, FRONTIER_SIZE));
+        memset(h_visited, 0, FRONTIER_SIZE);
+
+        int NODES_SIZE = ds->num_nodes * sizeof(NodeID);
+        int affectedNum = ds->affectedNodes.size();
+        int* d_affectedNum;
+        gpuErrchk(cudaMallocAsync(&(d_affectedNum), sizeof(int), ds->adListStream));
+        gpuErrchk(cudaMemcpyAsync(d_affectedNum, &(affectedNum), sizeof(int), cudaMemcpyHostToDevice, ds->adListStream));
+
+        int AFFECTED_SIZE = affectedNum * sizeof(NodeID);
+        NodeID* d_affectedNodes;
+        gpuErrchk(cudaMallocAsync(&(d_affectedNodes), AFFECTED_SIZE, ds->adListStream));
+        gpuErrchk(cudaMemcpyAsync(d_affectedNodes, &(ds->affectedNodes[0]), AFFECTED_SIZE, cudaMemcpyHostToDevice, ds->adListStream));
+
+        int* d_frontierNum;
+        gpuErrchk(cudaMallocAsync(&(d_frontierNum), sizeof(int), ds->adListStream));
+        cudaMemsetAsync(d_frontierNum, 0, sizeof(int), ds->adListStream);
+
+        NodeID* d_frontierNodes;
+        gpuErrchk(cudaMallocAsync(&d_frontierNodes, NODES_SIZE, ds->adListStream));
+        cudaMemsetAsync(d_frontierNodes, 0, NODES_SIZE, ds->adListStream);
+
+        NodeID* d_newFrontierNodes;
+        gpuErrchk(cudaMallocAsync(&d_newFrontierNodes, NODES_SIZE, ds->adListStream));
+        cudaMemsetAsync(d_newFrontierNodes, 0, NODES_SIZE, ds->adListStream);
+
+        const int BLK_SIZE = 512;
+        dim3 blkSize(BLK_SIZE);
+        dim3 gridSize((ds->num_nodes + BLK_SIZE - 1) / BLK_SIZE);
+
+        initPropertiesDyn<<<gridSize, blkSize, 0, ds->adListStream>>>(ds->property_c, ds->num_nodes, 1.0f / (ds->num_nodes));
+
+        Rank* outgoing_contrib;
+        int PROPERTY_SIZE = ds->num_nodes * sizeof(Rank);
+        gpuErrchk(cudaMallocAsync(&outgoing_contrib, PROPERTY_SIZE, ds->adListStream));
+        updateOutgoingContribDyn<<<gridSize, blkSize, 0, ds->adListStream>>>(outgoing_contrib, ds->property_c, ds->num_nodes, ds->d_NeighborSizes);
+
+        gridSize = ((affectedNum + BLK_SIZE - 1) / BLK_SIZE);
+        PRIter0_cuda<<<gridSize, blkSize, 0, ds->adListStream>>>(d_affectedNodes, d_affectedNum, d_frontierNum, d_frontierNodes,
+                    d_newFrontierNodes, ds->affected_c, ds->property_c, ds->d_NeighborsArrays, ds->d_NeighborSizes,
+                    visited_c, ds->num_nodes, ds->num_edges,
+                    ds->frontierArr_c, d_frontierExists, outgoing_contrib, base_score);
+
+        gpuErrchk(cudaMemcpyAsync(h_visited, visited_c, FRONTIER_SIZE, cudaMemcpyDeviceToHost, ds->adListStream));
+
+        int frontierNum = 0;
+        gpuErrchk(cudaMemcpyAsync(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost, ds->adListStream));
+
+        cudaDeviceSynchronize();
+
+        getFrontier(h_visited, ds->num_nodes, &frontierNum, d_frontierNodes);
+        gpuErrchk(cudaMemcpyAsync(d_frontierNum, &frontierNum, sizeof(int), cudaMemcpyHostToDevice, ds->adListStream));
+
+        cudaFreeAsync(d_affectedNodes, ds->adListStream);
+        cudaFreeAsync(d_affectedNum, ds->adListStream);
+
+        int* d_newFrontierNum;
+        gpuErrchk(cudaMallocAsync(&(d_newFrontierNum), sizeof(int), ds->adListStream));
+        cudaMemsetAsync(d_newFrontierNum, 0, sizeof(int), ds->adListStream);
+        
+        int iter = 0;
+        while(h_frontierExists && iter < max_iters){        
+            h_frontierExists = false;     
+            //std::cout << "Queue not empty, Queue size: " << queue.size() << std::endl;
+            cudaMemsetAsync(visited_c, 0, FRONTIER_SIZE, ds->adListStream);
+            cudaMemsetAsync(d_frontierExists, 0, sizeof(bool), ds->adListStream);
+
+            cudaStreamSynchronize(ds->adListStream);
+            gridSize = ((ds->num_nodes + BLK_SIZE - 1) / BLK_SIZE);
+            updateOutgoingContribDyn<<<gridSize, blkSize, 0, ds->adListStream>>>(outgoing_contrib, ds->property_c, ds->num_nodes, ds->d_NeighborSizes);
+            
+            cudaStreamSynchronize(ds->adListStream);
+            gridSize = (frontierNum + BLK_SIZE - 1) / BLK_SIZE;
+            dynPr_kerenel<<<gridSize, blkSize, 0, ds->adListStream>>>(d_frontierNum, d_frontierNodes, d_newFrontierNodes, d_newFrontierNum, ds->property_c, outgoing_contrib,  ds->d_NeighborsArrays, ds->d_NeighborSizes,
+                        visited_c, ds->num_nodes, ds->num_edges, d_frontierExists, base_score);
+
+            gpuErrchk(cudaMemcpyAsync(h_visited, visited_c, FRONTIER_SIZE, cudaMemcpyDeviceToHost, ds->adListStream));
+            cudaDeviceSynchronize();
+            getFrontier(h_visited, ds->num_nodes, &frontierNum, d_frontierNodes);
+            gpuErrchk(cudaMemcpyAsync(d_frontierNum, &frontierNum, sizeof(int), cudaMemcpyHostToDevice, ds->adListStream));
+            gpuErrchk(cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost));
+
+            iter++;
+        }
+
+        cudaStreamSynchronize(ds->adListStream);
+        gpuErrchk(cudaMemcpyAsync(&(ds->property[0]), ds->property_c, PROPERTY_SIZE, cudaMemcpyDeviceToHost, ds->adListStream));
+
+        cudaFreeAsync(visited_c, ds->adListStream);
+        cudaFreeAsync(d_frontierExists, ds->adListStream);
+        cudaFreeAsync(outgoing_contrib, ds->adListStream);
+
+        cudaFreeAsync(d_frontierNum, ds->adListStream);
+        cudaFreeAsync(d_frontierNodes, ds->adListStream);
+        cudaFreeAsync(d_newFrontierNodes, ds->adListStream);
+        cudaFreeAsync(d_newFrontierNum, ds->adListStream);
+        cudaFreeHost(h_visited);
+
+        #pragma omp for schedule(dynamic, 16)
+        for(NodeID i = 0; i < ds->num_nodes; i++){
+            ds->affected[i] = false;  
+        }
+
+        #pragma omp for schedule(dynamic, 16)
+        for(NodeID i : ds->affectedNodesSet){
+            ds->out_neighborsDelta[i].clear();  
+        }
+        (ds->affectedNodes).clear();
+        ds->affectedNodesSet.clear();
+
+        gpuErrchk(cudaDeviceSynchronize());
+    }
+    ds->cudaNeighborsConditional.notify_all();
+
+    t_cuda.Stop();
+    ofstream out("Alg.csv", std::ios_base::app);   
+    out << t_cuda.Seconds() << std::endl;    
+    out.close();
 }
 
 __global__ void initProperties(Rank* property, int numNodes, Rank value)

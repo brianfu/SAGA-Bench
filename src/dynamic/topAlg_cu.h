@@ -102,23 +102,23 @@ public:
 			    return PRStartFromScratch(ds8);    
 		} else if (alg == "prdyn") {
 	    	if (is_adList && ds->weighted)
-				return dynPRAlg(ds0);
-	    	else if (is_adList && !ds->weighted)
-				return dynPRAlg(ds1);
-	    	else if (is_rhh && ds->weighted)
-				return dynPRAlg(ds2);
-	    	else if (is_rhh && !ds->weighted)
-				return dynPRAlg(ds3);
-	    	else if (is_stinger)
-				return dynPRAlg(ds4);		
-	    	else if (is_adList2 && ds->weighted)
-				return dynPRAlg(ds5);
-	    	else if (is_adList2 && !ds->weighted)
-				return dynPRAlg(ds6);	    
+				return;
+	    	// else if (is_adList && !ds->weighted)
+			// 	return dynPRAlg(ds1);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return dynPRAlg(ds2);
+	    	// else if (is_rhh && !ds->weighted)
+			// 	return dynPRAlg(ds3);
+	    	// else if (is_stinger)
+			// 	return dynPRAlg(ds4);		
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return dynPRAlg(ds5);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return dynPRAlg(ds6);	    
 			// else if (is_adListST && ds->weighted)
             //     return dynPRAlg(ds7);
-			// else if (is_adListST && !ds->weighted) 
-			//     return dynPRAlg(ds8);  
+			else if (is_adListST && !ds->weighted) 
+			    return dynPRAlg(ds8);  
 		} else if (alg == "ccfromscratch") {
 	    	if (is_adList && ds->weighted)
 				return CCStartFromScratch(ds0);
