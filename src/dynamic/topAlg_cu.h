@@ -159,23 +159,24 @@ public:
 			//     return dynCCAlg(ds8);    
 		} else if (alg == "mcfromscratch") {
 	    	if (is_adList && ds->weighted)
-				return MCStartFromScratch(ds0);
-	    	else if (is_adList && !ds->weighted)
-				return MCStartFromScratch(ds1);
-	    	else if (is_rhh && ds->weighted)
-				return MCStartFromScratch(ds2);
-	    	else if (is_rhh && !ds->weighted)
-				return MCStartFromScratch(ds3);
-	    	else if (is_stinger)
-				return MCStartFromScratch(ds4);			
-	    	else if (is_adList2 && ds->weighted)
-				return MCStartFromScratch(ds5);
-	    	else if (is_adList2 && !ds->weighted)
-				return MCStartFromScratch(ds6);   
+				return;
+			// 	return MCStartFromScratch(ds0);
+	    	// else if (is_adList && !ds->weighted)
+			// 	return MCStartFromScratch(ds1);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return MCStartFromScratch(ds2);
+	    	// else if (is_rhh && !ds->weighted)
+			// 	return MCStartFromScratch(ds3);
+	    	// else if (is_stinger)
+			// 	return MCStartFromScratch(ds4);			
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return MCStartFromScratch(ds5);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return MCStartFromScratch(ds6);   
 			// else if (is_adListST && ds->weighted)
             //     return MCStartFromScratch(ds7);
-			// else if (is_adListST && !ds->weighted) 
-			//     return MCStartFromScratch(ds8);    
+			else if (is_adListST && !ds->weighted) 
+			    return MCStartFromScratch(ds8);    
 		} else if (alg == "mcdyn") {
 	    	if (is_adList && ds->weighted)
 				return dynMCAlg(ds0);
