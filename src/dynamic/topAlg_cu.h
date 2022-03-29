@@ -179,23 +179,24 @@ public:
 			    return MCStartFromScratch(ds8);    
 		} else if (alg == "mcdyn") {
 	    	if (is_adList && ds->weighted)
-				return dynMCAlg(ds0);
-	    	else if (is_adList && !ds->weighted)
-				return dynMCAlg(ds1);
-	    	else if (is_rhh && ds->weighted)
-				return dynMCAlg(ds2);
-	    	else if (is_rhh && !ds->weighted)
-				return dynMCAlg(ds3);
-	    	else if (is_stinger)
-				return dynMCAlg(ds4);		
-	    	else if (is_adList2 && ds->weighted)
-				return dynMCAlg(ds5);
-	    	else if (is_adList2 && !ds->weighted)
-				return dynMCAlg(ds6);	   
+				return;
+			// 	return dynMCAlg(ds0);
+	    	// else if (is_adList && !ds->weighted)
+			// 	return dynMCAlg(ds1);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return dynMCAlg(ds2);
+	    	// else if (is_rhh && !ds->weighted)
+			// 	return dynMCAlg(ds3);
+	    	// else if (is_stinger)
+			// 	return dynMCAlg(ds4);		
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return dynMCAlg(ds5);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return dynMCAlg(ds6);	   
 			// else if (is_adListST && ds->weighted)
             //     return dynMCAlg(ds7);
-			// else if (is_adListST && !ds->weighted) 
-			//     return dynMCAlg(ds8); 
+			else if (is_adListST && !ds->weighted) 
+			    return dynMCAlg(ds8); 
 		} else if (alg == "bfsfromscratch") {
 	    	if (source == -1) {
 				// DynamicSourcePicker sp(ds);
