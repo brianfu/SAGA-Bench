@@ -36,19 +36,25 @@ static __inline__ __device__ bool atomic_CAS(bool *address, bool compare, bool v
     return current_value;
 }
 
-void getFrontier(bool* visited, int numNodes, int* frontierNum, NodeID* frontierNodes)
+void getFrontier(bool* visited, int numNodes, int* frontierNum, NodeID* frontierNodes, cudaStream_t adListStream)
 {
-    std::vector<NodeID> newFrontier;
+    NodeID* newFrontier;
+    gpuErrchk(cudaMallocHost((void**)&newFrontier, numNodes * sizeof(NodeID)));
+    memset(newFrontier, 0, numNodes * sizeof(NodeID));
+    std::atomic<int> index(0);
 
+    #pragma omp for schedule(dynamic, 16)
     for(NodeID i = 0; i < numNodes; i++)
     {
         if(visited[i])
         {
-            newFrontier.push_back(i);
+            int currIndex = std::atomic_fetch_add(&index, 1);
+            newFrontier[currIndex] = i;
         }
     }
-    *frontierNum = newFrontier.size();
-    cudaMemcpy(frontierNodes, &(newFrontier[0]), (*frontierNum) * sizeof(NodeID), cudaMemcpyHostToDevice);
+    *frontierNum = index.load();
+    cudaMemcpyAsync(frontierNodes, newFrontier, (*frontierNum) * sizeof(NodeID), cudaMemcpyHostToDevice, adListStream);
+    cudaFreeHost(newFrontier);
 }
 
 __device__ float atomicCAS_f32(float *p, float cmp, float val)

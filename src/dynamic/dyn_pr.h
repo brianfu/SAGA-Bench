@@ -261,7 +261,7 @@ void dynPRAlg(T* ds)
 
         cudaDeviceSynchronize();
 
-        getFrontier(h_visited, ds->num_nodes, &frontierNum, d_frontierNodes);
+        getFrontier(h_visited, ds->num_nodes, &frontierNum, d_frontierNodes, ds->adListStream);
         gpuErrchk(cudaMemcpyAsync(d_frontierNum, &frontierNum, sizeof(int), cudaMemcpyHostToDevice, ds->adListStream));
 
         cudaFreeAsync(d_affectedNodes, ds->adListStream);
@@ -289,7 +289,7 @@ void dynPRAlg(T* ds)
 
             gpuErrchk(cudaMemcpyAsync(h_visited, visited_c, FRONTIER_SIZE, cudaMemcpyDeviceToHost, ds->adListStream));
             cudaDeviceSynchronize();
-            getFrontier(h_visited, ds->num_nodes, &frontierNum, d_frontierNodes);
+            getFrontier(h_visited, ds->num_nodes, &frontierNum, d_frontierNodes, ds->adListStream);
             gpuErrchk(cudaMemcpyAsync(d_frontierNum, &frontierNum, sizeof(int), cudaMemcpyHostToDevice, ds->adListStream));
             gpuErrchk(cudaMemcpy(&h_frontierExists, d_frontierExists, sizeof(bool), cudaMemcpyDeviceToHost));
 
