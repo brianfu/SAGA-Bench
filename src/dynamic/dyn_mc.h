@@ -163,24 +163,15 @@ void dynMCAlg(T* ds){
 
         if(ds->sizeOfNodesArrayOnCuda < ds->num_nodes)
         {
-            // t1_cuda.Start();
             resizeAndCopyToCudaMemory(ds);
-            // t1_cuda.Stop();
-            // t1Time = t1_cuda.Seconds();
         }
         else if(ds->numberOfNodesOnCuda < ds->num_nodes)
         {
-            // t2_cuda.Start();
             copyToCudaMemory(ds);
-            // t2_cuda.Stop();
-            // t2Time = t2_cuda.Seconds();
         }
         else
         {
-            // t3_cuda.Start();
             updateNeighbors(ds);
-            // t3_cuda.Stop();
-            // t3Time = t3_cuda.Seconds();
         }
         cudaDeviceSynchronize();
 
@@ -445,34 +436,4 @@ void MCStartFromScratch(T* ds){
     out.close();
 }
 
-/*template<typename T> 
-void MCStartFromScratch(const string& datatype, T* partition, bool directed){ 
-    std::cout << "Running MC from scratch" << std::endl;
-    #pragma omp parallel for
-    for (NodeID n=0; n < partition->num_nodes; n++)
-       partition->property[n] = n;
-    
-    int num_iter = 0;
-    bool change = true;
-    while(change){
-        change = false;
-        num_iter++;
-        #pragma omp parallel for
-        for(NodeID n = 0; n < partition->num_nodes; n++){
-            float old_val = partition->property[n];
-            float new_val = old_val;
-
-            for(auto v: in_neigh(n, datatype, partition, partition->directed)){
-                new_val = std::max(new_val, partition->property[v]);
-            }
-
-            assert(new_val >= old_val);
-
-            partition->property[n] = new_val; 
-            if(partition->property[n] != old_val) change = true;
-        }
-    }
-
-    std::cout << "MCFromScratch took " << num_iter << " iterations" << std::endl;      
-}*/
 #endif  // DYN_MC_H_    

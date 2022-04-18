@@ -37,6 +37,7 @@ void* dequeAndInsertEdge(
 	    batch++;
 	    alg.performAlg();
 
+		// Write to file to compare results
 		// if(ds->num_edges == 234370166)
 		// {
 		// 	ofstream myfile;

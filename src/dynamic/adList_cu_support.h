@@ -181,12 +181,6 @@ void resizeAndCopyToCudaMemory(T* ds)
                 gpuErrchk(cudaMemcpyAsync(h_array[i], &(((ds->out_neighbors)[i])[0]), (ds->out_neighbors[i]).size() * sizeof(Node), cudaMemcpyHostToDevice, ds->adListStream));
                 h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
                 h_NeighborCapacity[i] = (ds->out_neighbors[i]).size() * 2;
-
-                // ds->numberOfNeighborsOnCuda += (ds->out_neighbors[i]).size();
-                // if(ds->affected[i])
-                // {
-                //     ds->affectedNodes.push_back(i);
-                // }
             }
         }
         else
@@ -200,24 +194,18 @@ void resizeAndCopyToCudaMemory(T* ds)
 
             #pragma omp for schedule(dynamic, 16)
             for(NodeID i : ds->affectedNodesSet) {
-            // for(size_t i = 0 ; i < ds->num_nodes ; i++){
-            //     if(ds->affected[i])
-            //     {
-                    // ds->affectedNodes.push_back(i);
-                    if(i < ds->numberOfNodesOnCuda)
-                    {
-                        Node* tempNeighbors = h_array[i];
-                        ds->stale_neighbors.push_back(tempNeighbors);
-                    }
-                    if(h_NeighborCapacity[i] < (ds->out_neighbors[i]).size())
-                    {
-                        h_NeighborCapacity[i] = ((h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : h_NeighborCapacity[i]) * 2;
-                    }
-                    cudaMallocAsync(&h_array[i], (h_NeighborCapacity[i] * sizeof(Node)), ds->adListStream);
-                    gpuErrchk(cudaMemcpyAsync(h_array[i], &((ds->out_neighbors[i])[0]), (ds->out_neighbors[i]).size() * sizeof(Node), cudaMemcpyHostToDevice, ds->adListStream));
-                    h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
-                // }
-                // ds->numberOfNeighborsOnCuda += (ds->out_neighbors[i]).size();
+                if(i < ds->numberOfNodesOnCuda)
+                {
+                    Node* tempNeighbors = h_array[i];
+                    ds->stale_neighbors.push_back(tempNeighbors);
+                }
+                if(h_NeighborCapacity[i] < (ds->out_neighbors[i]).size())
+                {
+                    h_NeighborCapacity[i] = ((h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : h_NeighborCapacity[i]) * 2;
+                }
+                cudaMallocAsync(&h_array[i], (h_NeighborCapacity[i] * sizeof(Node)), ds->adListStream);
+                gpuErrchk(cudaMemcpyAsync(h_array[i], &((ds->out_neighbors[i])[0]), (ds->out_neighbors[i]).size() * sizeof(Node), cudaMemcpyHostToDevice, ds->adListStream));
+                h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
             }
             cudaStreamSynchronize(ds->adListStream);
             cudaFreeAsync(ds->d_NeighborsArrays, ds->adListStream);
@@ -253,8 +241,6 @@ void copyToCudaMemory(T* ds)
     {
         int NEIGHBORS_POINTERS_SIZE = ds->sizeOfNodesArrayOnCuda * sizeof(Node*);
         int NEIGHBORS_SIZE = ds->sizeOfNodesArrayOnCuda * sizeof(int);
-        // Node** h_array = (Node**)malloc(NEIGHBORS_POINTERS_SIZE);
-        // int* h_NeighborSizes = (int*)malloc(NEIGHBORS_SIZE);
         bool copyFullOrDelta[ds->affectedNodesSet.size()] = {false};
 
         int copySize[ds->affectedNodesSet.size()] = {0};
@@ -262,41 +248,30 @@ void copyToCudaMemory(T* ds)
         std::atomic<int> index(0);
         std::atomic<int> totalNodesToCopy(0);
 
-        // std::copy(h_array, ds->d_NeighborsArrays, NEIGHBORS_POINTERS_SIZE, cudaMemcpyDeviceToHost);
-        // cudaMemcpy(h_NeighborSizes, ds->d_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyDeviceToHost);
-
-        // ds->numberOfNeighborsOnCuda = 0;
         ds->affectedNodes.resize(ds->affectedNodesSet.size());
         #pragma omp for schedule(dynamic, 16)
         for(NodeID i : ds->affectedNodesSet) {
-        // for(size_t i = 0 ; i < ds->num_nodes ; i++){
-            // if(ds->affected[i])
-            // {
-                // ds->affectedNodes.push_back(i);
-                int currIndex = std::atomic_fetch_add(&index, 1);
-                if(ds->h_NeighborCapacity[i] < (ds->out_neighbors[i]).size())
+            int currIndex = std::atomic_fetch_add(&index, 1);
+            if(ds->h_NeighborCapacity[i] < (ds->out_neighbors[i]).size())
+            {
+                if(i < ds->numberOfNodesOnCuda)
                 {
-                    if(i < ds->numberOfNodesOnCuda)
-                    {
-                        Node* tempNeighbors = ds->h_NeighborsArrays[i];
-                        ds->stale_neighbors.push_back(tempNeighbors);
-                    }
-                    copyFullOrDelta[currIndex] = true;
-                    startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighbors[i].size());
-                    copySize[currIndex] = ds->out_neighbors[i].size();
-                    ds->h_NeighborCapacity[i] = ((ds->h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : ds->h_NeighborCapacity[i]) * 2;
-                    cudaMallocAsync(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)), ds->adListStream);
-                    // gpuErrchk(cudaMemcpy(ds->h_NeighborsArrays[i], &((ds->out_neighbors[i])[0]), (ds->out_neighbors[i]).size() * sizeof(Node), cudaMemcpyHostToDevice));
+                    Node* tempNeighbors = ds->h_NeighborsArrays[i];
+                    ds->stale_neighbors.push_back(tempNeighbors);
                 }
-                else
-                {
-                    startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighborsDelta[i].size());
-                    copySize[currIndex] = ds->out_neighborsDelta[i].size();
-                }
-                ds->h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
-                ds->affectedNodes[currIndex] = i;
-            // }
-            // ds->numberOfNeighborsOnCuda += (ds->out_neighbors[i]).size();
+                copyFullOrDelta[currIndex] = true;
+                startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighbors[i].size());
+                copySize[currIndex] = ds->out_neighbors[i].size();
+                ds->h_NeighborCapacity[i] = ((ds->h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : ds->h_NeighborCapacity[i]) * 2;
+                cudaMallocAsync(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)), ds->adListStream);
+            }
+            else
+            {
+                startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighborsDelta[i].size());
+                copySize[currIndex] = ds->out_neighborsDelta[i].size();
+            }
+            ds->h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
+            ds->affectedNodes[currIndex] = i;
         }
         cudaMemcpyAsync(ds->d_NeighborsArrays, ds->h_NeighborsArrays, NEIGHBORS_POINTERS_SIZE, cudaMemcpyHostToDevice, ds->adListStream);
         coalesceEdgesAndCopyToCuda(ds, copyFullOrDelta, startPosition, copySize, totalNodesToCopy.load());
@@ -314,12 +289,6 @@ void updateNeighbors(T* ds)
     {
         int NEIGHBORS_POINTERS_SIZE = ds->sizeOfNodesArrayOnCuda * sizeof(Node*);
         int NEIGHBORS_SIZE = ds->sizeOfNodesArrayOnCuda * sizeof(int);
-        // Node** h_array = (Node**)malloc(NEIGHBORS_POINTERS_SIZE);
-        // int* h_NeighborSizes = (int*)malloc(NEIGHBORS_SIZE);
-
-        // cudaMemcpy(h_array, ds->d_NeighborsArrays, NEIGHBORS_POINTERS_SIZE, cudaMemcpyDeviceToHost);
-        // cudaMemcpy(h_NeighborSizes, ds->d_NeighborSizes, NEIGHBORS_SIZE, cudaMemcpyDeviceToHost);
-        // ds->numberOfNeighborsOnCuda = 0;
         bool flag = false;
         bool copyFullOrDelta[ds->affectedNodesSet.size()] {false};
         int copySize[ds->affectedNodesSet.size()] = {0};
@@ -330,39 +299,25 @@ void updateNeighbors(T* ds)
         ds->affectedNodes.resize(ds->affectedNodesSet.size());
         #pragma omp for schedule(dynamic, 16)
         for(NodeID i : ds->affectedNodesSet) {
-        // for(size_t i = 0 ; i < ds->num_nodes ; i++){
-            // ds->numberOfNeighborsOnCuda += (ds->out_neighbors[i]).size();
-            // if(ds->affected[i])
-            // {
-                int currIndex = std::atomic_fetch_add(&index, 1);
-                if(ds->h_NeighborCapacity[i] < (ds->out_neighbors[i]).size())
-                {
-                    // Node* d_tempNeighbors;
-                    // int temp_Capacity = ((ds->h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : ds->h_NeighborCapacity[i]) * 2;
-                    // cudaMalloc(&d_tempNeighbors, (temp_Capacity * sizeof(Node)));
-                    // gpuErrchk(cudaMemcpyAsync(d_tempNeighbors, ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)), cudaMemcpyDeviceToDevice));
-                    // cudaFree(ds->h_NeighborsArrays[i]);
-                    // ds->h_NeighborsArrays[i] = d_tempNeighbors;
-                    // ds->h_NeighborCapacity[i] = temp_Capacity;
-                    ds->h_NeighborCapacity[i] = ((ds->h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : ds->h_NeighborCapacity[i]) * 2;
-                    Node* tempNeighbors = ds->h_NeighborsArrays[i];
-                    ds->stale_neighbors.push_back(tempNeighbors);
-                    cudaMallocAsync(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)), ds->adListStream);
-                    flag = true;
-                    copyFullOrDelta[currIndex] = true;
-                    startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighbors[i].size());
-                    copySize[currIndex] = ds->out_neighbors[i].size();
-                }
-                else
-                {
-                    startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighborsDelta[i].size());
-                    copySize[currIndex] = ds->out_neighborsDelta[i].size();
-                }
-                ds->affectedNodes[currIndex] = i;
-                // cudaFree(h_array[i]);
-                // cudaMalloc(&h_array[i], (ds->out_neighbors[i]).size() * sizeof(Node));
-                ds->h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
-            // }
+            int currIndex = std::atomic_fetch_add(&index, 1);
+            if(ds->h_NeighborCapacity[i] < (ds->out_neighbors[i]).size())
+            {
+                ds->h_NeighborCapacity[i] = ((ds->h_NeighborCapacity[i] * 2 < (ds->out_neighbors[i]).size()) ? (ds->out_neighbors[i]).size() : ds->h_NeighborCapacity[i]) * 2;
+                Node* tempNeighbors = ds->h_NeighborsArrays[i];
+                ds->stale_neighbors.push_back(tempNeighbors);
+                cudaMallocAsync(&ds->h_NeighborsArrays[i], (ds->h_NeighborCapacity[i] * sizeof(Node)), ds->adListStream);
+                flag = true;
+                copyFullOrDelta[currIndex] = true;
+                startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighbors[i].size());
+                copySize[currIndex] = ds->out_neighbors[i].size();
+            }
+            else
+            {
+                startPosition[currIndex] = std::atomic_fetch_add(&totalNodesToCopy, ds->out_neighborsDelta[i].size());
+                copySize[currIndex] = ds->out_neighborsDelta[i].size();
+            }
+            ds->affectedNodes[currIndex] = i;
+            ds->h_NeighborSizes[i] = (ds->out_neighbors[i]).size();
         }
 
         if(flag)

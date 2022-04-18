@@ -115,12 +115,10 @@ inline void adList_cu<Node>::freeStaleArrays()
     { 
         {
             std::unique_lock<std::mutex> lock(cudaNeighborsMutex);
-            // #pragma omp for schedule(dynamic, 16)
             for(int i = 0; i < stale_neighbors.size(); i++)
             {
                 cudaFreeAsync(stale_neighbors[i], adListStream);
             }
-            // cudaStreamSynchronize(adListStream);
             gpuErrchk(cudaDeviceSynchronize());
             stale_neighbors.clear();
             cudaNeighborsConditional.wait(lock);
@@ -131,8 +129,7 @@ inline void adList_cu<Node>::freeStaleArrays()
 
 template <typename T>
 inline adList_cu<T>::adList_cu(bool w, bool d)
-    : dataStruc(w, d), sizeOfNodesArrayOnCuda(0), isAlive(true) {
-         /*std::cout << "Creating AdList" << std::endl;*/ }    
+    : dataStruc(w, d), sizeOfNodesArrayOnCuda(0), isAlive(true) {}    
 
 template <>
 inline adList_cu<Node>::adList_cu(bool w, bool d)
@@ -140,7 +137,7 @@ inline adList_cu<Node>::adList_cu(bool w, bool d)
         cudaStreamCreate(&adListStream); 
         std::thread cudaFreeWorker(&adList_cu<Node>::freeStaleArrays, this);
         cudaFreeWorker.detach();
-         /*std::cout << "Creating AdList" << std::endl;*/ }    
+}    
 
 template <typename T>
 adList_cu<T>::~adList_cu()
@@ -179,14 +176,12 @@ bool adList_cu<T>::vertexExists(const Edge& e, bool source)
     affectedNodesSet.insert(e.destination);
     if (exists) {        
         num_edges++;        
-        // return true;
         if(source) affected[e.source] = 1;
         else affected[e.destination] = 1;
         return true;
     } else {
         num_nodes++;        
         num_edges++;
-        // return false;
         affected.push_back(1);
         return false;
     }  
