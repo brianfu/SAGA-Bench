@@ -6,8 +6,11 @@
 #include "stinger.h"
 #include "darhh.h"
 #include "adListChunked.h"
+#include "adList.h"
 
-#include "topDataStruc.h"
+#if 0
+#include "topDataStruc_cu.h"
+#endif
 
 template <typename T>
 class neighborhood;
@@ -90,6 +93,75 @@ public:
 	return cursor->getWeight();
     }
 };
+
+// template<typename U>
+// class neighborhood_iter<adList_cu<U>> {    
+//     friend class neighborhood<adList_cu<U>>;
+// private:      
+//     adList_cu<U>* ds;      
+//     NodeID node;
+//     bool in_neigh;
+//     U* cursor;
+// public:
+//     neighborhood_iter(adList_cu<U>* _ds, NodeID _n, bool _in_neigh): 
+// 	ds(_ds), node(_n), in_neigh(_in_neigh){        
+// 	if(in_neigh){        
+// 	    bool empty = ds->in_neighbors[node].empty(); 
+// 	    cursor = empty? 0 : &(ds->in_neighbors[node][0]);        
+// 	}
+// 	else{        
+// 	    bool empty = ds->out_neighbors[node].empty(); 
+// 	    cursor = empty? 0 : &(ds->out_neighbors[node][0]);
+// 	}
+//     }
+
+//     bool operator!=(const neighborhood_iter<adList_cu<U>>& it){
+//         return cursor != it.cursor;
+//     }
+
+//     neighborhood_iter& operator++(){
+//         if(in_neigh){
+//             int size_in_neigh = ds->in_neighbors[node].size();
+//             if(cursor == &(ds->in_neighbors[node][size_in_neigh-1])){
+//                 cursor = nullptr; 
+//             }
+//             else cursor = cursor + 1;
+//         }else{
+//             int size_out_neigh = ds->out_neighbors[node].size();
+//             if(cursor == &(ds->out_neighbors[node][size_out_neigh-1])){
+//                 cursor = nullptr;
+//             }else cursor = cursor + 1;
+//         }
+
+//         return *this;	      
+//     }
+
+//     neighborhood_iter& operator++(int){
+//          if(in_neigh){
+//              int size_in_neigh = ds->in_neighbors[node].size();
+//              if(cursor == &(ds->in_neighbors[node][size_in_neigh-1])){
+//                  cursor = nullptr; 
+//              }
+//              else cursor = cursor + 1;
+//          }else{
+//              int size_out_neigh = ds->out_neighbors[node].size();
+//              if(cursor == &(ds->out_neighbors[node][size_out_neigh-1])){
+//                  cursor = nullptr;
+//              }else cursor = cursor + 1;
+//          }
+
+//          return *this;		
+//     }
+
+//     NodeID operator*() {
+// 	return cursor->getNodeID();
+//     }
+
+//     Weight extractWeight(){
+// 	return cursor->getWeight();
+//     }
+// };
+
 
 template <typename U>
 class neighborhood_iter<adListShared<U>> {    

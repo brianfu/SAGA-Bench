@@ -12,7 +12,7 @@ This is the top API for performing an algorithm
 #include "dyn_pr.h"
 #include "dyn_cc.h"
 #include "dyn_mc.h"
-#include "dyn_bfs.h"
+#include "dyn_bfs_cu.h"
 #include "dyn_sssp.h"
 #include "dyn_sswp.h"
 #include "source_picker_dynamic.h"
@@ -46,6 +46,7 @@ public:
 		is_adList2 = (dtype.compare("adListChunked") == 0);
 		std::cout << "Algorithm: " << alg << std::endl;
 		std::cout << "Data type: " << dtype << std::endl;
+		std::cout << "is_adListST" << (is_adListST ? "true" : "false") << std::endl;
     }
     
     void performAlg() {
@@ -57,8 +58,8 @@ public:
 		darhh<NodeWeight> *ds2 = dynamic_cast<darhh<NodeWeight>*>(ds);
 		darhh<Node> *ds3 = dynamic_cast<darhh<Node>*>(ds);
 		stinger *ds4 = dynamic_cast<stinger*>(ds);
-		adList<NodeWeight> *ds7 = dynamic_cast<adList<NodeWeight>*>(ds);
-		adList<Node> *ds8 = dynamic_cast<adList<Node>*>(ds);
+		adList_cu<NodeWeight> *ds7 = dynamic_cast<adList_cu<NodeWeight>*>(ds);
+		adList_cu<Node> *ds8 = dynamic_cast<adList_cu<Node>*>(ds);
 	
 		if (alg == "traverse") {
 	 	    if (is_adList && ds->weighted)
@@ -75,46 +76,47 @@ public:
 				return traverseAlg(ds5);
 			else if (is_adList2 && !ds->weighted)
 				return traverseAlg(ds6);	   
-			else if (is_adListST && ds->weighted)
-                return traverseAlg(ds7);
-			else if (is_adListST && !ds->weighted) 
-			    return traverseAlg(ds8);
+			// else if (is_adListST && ds->weighted)
+            //     return traverseAlg(ds7);
+			// else if (is_adListST && !ds->weighted) 
+			//     return traverseAlg(ds8);
 		} else if (alg == "prfromscratch") {
 	    	if (is_adList && ds->weighted)
-				return PRStartFromScratch(ds0);
-	    	else if (is_adList && !ds->weighted)
-				return PRStartFromScratch(ds1);
-	    	else if (is_rhh && ds->weighted)
-				return PRStartFromScratch(ds2);
-	   		else if (is_rhh && !ds->weighted)
-				return PRStartFromScratch(ds3);
-	    	else if (is_stinger)
-				return PRStartFromScratch(ds4);
-	    	else if (is_adList2 && ds->weighted)
-				return PRStartFromScratch(ds5);
-	    	else if (is_adList2 && !ds->weighted)
-				return PRStartFromScratch(ds6);	
-			else if (is_adListST && ds->weighted)
-                return PRStartFromScratch(ds7);
+				return;
+				// return PRStartFromScratch(ds0);
+	    	// else if (is_adList && !ds->weighted)
+			// 	return PRStartFromScratch(ds1);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return PRStartFromScratch(ds2);
+	   		// else if (is_rhh && !ds->weighted)
+			// 	return PRStartFromScratch(ds3);
+	    	// else if (is_stinger)
+			// 	return PRStartFromScratch(ds4);
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return PRStartFromScratch(ds5);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return PRStartFromScratch(ds6);	
+			// else if (is_adListST && ds->weighted)
+            //     return PRStartFromScratch(ds7);
 			else if (is_adListST && !ds->weighted) 
 			    return PRStartFromScratch(ds8);    
 		} else if (alg == "prdyn") {
 	    	if (is_adList && ds->weighted)
-				return dynPRAlg(ds0);
-	    	else if (is_adList && !ds->weighted)
-				return dynPRAlg(ds1);
-	    	else if (is_rhh && ds->weighted)
-				return dynPRAlg(ds2);
-	    	else if (is_rhh && !ds->weighted)
-				return dynPRAlg(ds3);
-	    	else if (is_stinger)
-				return dynPRAlg(ds4);		
-	    	else if (is_adList2 && ds->weighted)
-				return dynPRAlg(ds5);
-	    	else if (is_adList2 && !ds->weighted)
-				return dynPRAlg(ds6);	    
-			else if (is_adListST && ds->weighted)
-                return dynPRAlg(ds7);
+				return;
+	    	// else if (is_adList && !ds->weighted)
+			// 	return dynPRAlg(ds1);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return dynPRAlg(ds2);
+	    	// else if (is_rhh && !ds->weighted)
+			// 	return dynPRAlg(ds3);
+	    	// else if (is_stinger)
+			// 	return dynPRAlg(ds4);		
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return dynPRAlg(ds5);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return dynPRAlg(ds6);	    
+			// else if (is_adListST && ds->weighted)
+            //     return dynPRAlg(ds7);
 			else if (is_adListST && !ds->weighted) 
 			    return dynPRAlg(ds8);  
 		} else if (alg == "ccfromscratch") {
@@ -132,10 +134,10 @@ public:
 				return CCStartFromScratch(ds5);
 	    	else if (is_adList2 && !ds->weighted)
 				return CCStartFromScratch(ds6);	 
-			else if (is_adListST && ds->weighted)
-                return CCStartFromScratch(ds7);
-			else if (is_adListST && !ds->weighted) 
-			    return CCStartFromScratch(ds8);     
+			// else if (is_adListST && ds->weighted)
+            //     return CCStartFromScratch(ds7);
+			// else if (is_adListST && !ds->weighted) 
+			//     return CCStartFromScratch(ds8);     
 		} else if (alg == "ccdyn") {
 	    	if (is_adList && ds->weighted)
 				return dynCCAlg(ds0);
@@ -151,101 +153,108 @@ public:
 				return dynCCAlg(ds5);
 	    	else if (is_adList2 && !ds->weighted)
 				return dynCCAlg(ds6);	
-			else if (is_adListST && ds->weighted)
-                return dynCCAlg(ds7);
-			else if (is_adListST && !ds->weighted) 
-			    return dynCCAlg(ds8);    
+			// else if (is_adListST && ds->weighted)
+            //     return dynCCAlg(ds7);
+			// else if (is_adListST && !ds->weighted) 
+			//     return dynCCAlg(ds8);    
 		} else if (alg == "mcfromscratch") {
 	    	if (is_adList && ds->weighted)
-				return MCStartFromScratch(ds0);
-	    	else if (is_adList && !ds->weighted)
-				return MCStartFromScratch(ds1);
-	    	else if (is_rhh && ds->weighted)
-				return MCStartFromScratch(ds2);
-	    	else if (is_rhh && !ds->weighted)
-				return MCStartFromScratch(ds3);
-	    	else if (is_stinger)
-				return MCStartFromScratch(ds4);			
-	    	else if (is_adList2 && ds->weighted)
-				return MCStartFromScratch(ds5);
-	    	else if (is_adList2 && !ds->weighted)
-				return MCStartFromScratch(ds6);   
-			else if (is_adListST && ds->weighted)
-                return MCStartFromScratch(ds7);
+				return;
+			// 	return MCStartFromScratch(ds0);
+	    	// else if (is_adList && !ds->weighted)
+			// 	return MCStartFromScratch(ds1);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return MCStartFromScratch(ds2);
+	    	// else if (is_rhh && !ds->weighted)
+			// 	return MCStartFromScratch(ds3);
+	    	// else if (is_stinger)
+			// 	return MCStartFromScratch(ds4);			
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return MCStartFromScratch(ds5);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return MCStartFromScratch(ds6);   
+			// else if (is_adListST && ds->weighted)
+            //     return MCStartFromScratch(ds7);
 			else if (is_adListST && !ds->weighted) 
 			    return MCStartFromScratch(ds8);    
 		} else if (alg == "mcdyn") {
 	    	if (is_adList && ds->weighted)
-				return dynMCAlg(ds0);
-	    	else if (is_adList && !ds->weighted)
-				return dynMCAlg(ds1);
-	    	else if (is_rhh && ds->weighted)
-				return dynMCAlg(ds2);
-	    	else if (is_rhh && !ds->weighted)
-				return dynMCAlg(ds3);
-	    	else if (is_stinger)
-				return dynMCAlg(ds4);		
-	    	else if (is_adList2 && ds->weighted)
-				return dynMCAlg(ds5);
-	    	else if (is_adList2 && !ds->weighted)
-				return dynMCAlg(ds6);	   
-			else if (is_adListST && ds->weighted)
-                return dynMCAlg(ds7);
+				return;
+			// 	return dynMCAlg(ds0);
+	    	// else if (is_adList && !ds->weighted)
+			// 	return dynMCAlg(ds1);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return dynMCAlg(ds2);
+	    	// else if (is_rhh && !ds->weighted)
+			// 	return dynMCAlg(ds3);
+	    	// else if (is_stinger)
+			// 	return dynMCAlg(ds4);		
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return dynMCAlg(ds5);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return dynMCAlg(ds6);	   
+			// else if (is_adListST && ds->weighted)
+            //     return dynMCAlg(ds7);
 			else if (is_adListST && !ds->weighted) 
 			    return dynMCAlg(ds8); 
 		} else if (alg == "bfsfromscratch") {
 	    	if (source == -1) {
-				DynamicSourcePicker sp(ds);
-				source = sp.PickNext(); 
+				// DynamicSourcePicker sp(ds);
+				// source = sp.PickNext(); 
+				source = 0;
 				std::cout << "Source in top: " << source << std::endl;
 			if(source == -1)
 		    	return;
 	    	}
 	    	if (is_adList && ds->weighted)
-				return BFSStartFromScratch(ds0, source);
-	    	else if (is_adList && !ds->weighted)
-				return BFSStartFromScratch(ds1, source);
-	    	else if (is_rhh && ds->weighted)
-				return BFSStartFromScratch(ds2, source);
-	    	else if (is_rhh && !ds->weighted)
-				return BFSStartFromScratch(ds3, source);
-	    	else if (is_stinger)
-				return BFSStartFromScratch(ds4, source);			
-	    	else if (is_adList2 && ds->weighted)
-				return BFSStartFromScratch(ds5, source);
-	    	else if (is_adList2 && !ds->weighted)
-				return BFSStartFromScratch(ds6, source);   
+				return;
+			// 	return BFSStartFromScratch(ds0, source);
+	    	// else if (is_adList && !ds->weighted)
+			// 	return BFSStartFromScratch(ds1, source);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return BFSStartFromScratch(ds2, source);
+	    	// else if (is_rhh && !ds->weighted)
+			// 	return BFSStartFromScratch(ds3, source);
+	    	// else if (is_stinger)
+			// 	return BFSStartFromScratch(ds4, source);			
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return BFSStartFromScratch(ds5, source);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return BFSStartFromScratch(ds6, source);   
 			else if (is_adListST && ds->weighted)
                 return BFSStartFromScratch(ds7, source);
 			else if (is_adListST && !ds->weighted) 
 			    return BFSStartFromScratch(ds8, source);  
-		} else if (alg == "bfsdyn") {
+		}
+		 else if (alg == "bfsdyn") {
 	    	if(source == -1){
-				DynamicSourcePicker sp(ds);
-				source = sp.PickNext(); 
+				// DynamicSourcePicker sp(ds);
+				// source = sp.PickNext(); 
+				source = 0;
 				std::cout << "Source in top: " << source << std::endl;
 				if(source == -1)
 		    		return;
 	   		}
 	    	if (is_adList && ds->weighted)
-				return dynBFSAlg(ds0, source);
-	    	else if (is_adList && !ds->weighted)
-				return dynBFSAlg(ds1, source);
-	    	else if (is_rhh && ds->weighted)
-				return dynBFSAlg(ds2, source);
-	    	else if (is_rhh && !ds->weighted)
-				return dynBFSAlg(ds3, source);
-	    	else if (is_stinger)
-				return dynBFSAlg(ds4, source);	 
-	    	else if (is_adList2 && ds->weighted)
-				return dynBFSAlg(ds5, source);
-	    	else if (is_adList2 && !ds->weighted)
-				return dynBFSAlg(ds6, source);  
-			else if (is_adListST && ds->weighted)
-                return dynBFSAlg(ds7, source);
+				return;// dynBFSAlg(ds0, source);
+	    	// else if (is_adList && !ds->weighted)
+			// 	return dynBFSAlg(ds1, source);
+	    	// else if (is_rhh && ds->weighted)
+			// 	return dynBFSAlg(ds2, source);
+	    	// else if (is_rhh && !ds->weighted)
+			// 	return dynBFSAlg(ds3, source);
+	    	// else if (is_stinger)
+			// 	return dynBFSAlg(ds4, source);	 
+	    	// else if (is_adList2 && ds->weighted)
+			// 	return dynBFSAlg(ds5, source);
+	    	// else if (is_adList2 && !ds->weighted)
+			// 	return dynBFSAlg(ds6, source);  
+			// else if (is_adListST && ds->weighted)
+            //     return dynBFSAlg(ds7, source);
 			else if (is_adListST && !ds->weighted) 
 			    return dynBFSAlg(ds8, source);
-		} else if (alg == "ssspfromscratch") {
+		} 
+		else if (alg == "ssspfromscratch") {
 	    	if (source == -1) {
 				DynamicSourcePicker sp(ds);
 				source = sp.PickNext(); 
@@ -267,10 +276,10 @@ public:
 				return SSSPStartFromScratch(ds5, source, 1);
 	    	else if (is_adList2 && !ds->weighted)
 				return SSSPStartFromScratch(ds6, source, 1);
-			else if (is_adListST && ds->weighted)
-                return SSSPStartFromScratch(ds7, source, 1);
-			else if (is_adListST && !ds->weighted) 
-			    return SSSPStartFromScratch(ds8, source, 1);
+			// else if (is_adListST && ds->weighted)
+            //     return SSSPStartFromScratch(ds7, source, 1);
+			// else if (is_adListST && !ds->weighted) 
+			//     return SSSPStartFromScratch(ds8, source, 1);
 		} else if (alg == "ssspdyn") {
 		    if (source == -1) {
 				DynamicSourcePicker sp(ds);
@@ -293,10 +302,10 @@ public:
 				return dynSSSPAlg(ds5, source);
 	    	else if (is_adList2 && !ds->weighted)
 				return dynSSSPAlg(ds6, source);
-			else if (is_adListST && ds->weighted)
-                return dynSSSPAlg(ds7, source);
-			else if (is_adListST && !ds->weighted) 
-			    return dynSSSPAlg(ds8, source);
+			// else if (is_adListST && ds->weighted)
+            //     return dynSSSPAlg(ds7, source);
+			// else if (is_adListST && !ds->weighted) 
+			//     return dynSSSPAlg(ds8, source);
 		} else if (alg == "sswpfromscratch") {
 	    	if (source == -1) {
 				DynamicSourcePicker sp(ds);
@@ -319,10 +328,10 @@ public:
 				return SSWPStartFromScratch(ds5, source);
 	    	else if (is_adList2 && !ds->weighted)
 				return SSWPStartFromScratch(ds6, source);
-			else if (is_adListST && ds->weighted)
-                return SSWPStartFromScratch(ds7, source);
-			else if (is_adListST && !ds->weighted) 
-			    return SSWPStartFromScratch(ds8, source);
+			// else if (is_adListST && ds->weighted)
+            //     return SSWPStartFromScratch(ds7, source);
+			// else if (is_adListST && !ds->weighted) 
+			//     return SSWPStartFromScratch(ds8, source);
 		} else if (alg == "sswpdyn") {
 	    	if(source == -1) {
 				DynamicSourcePicker sp(ds);
@@ -345,10 +354,10 @@ public:
 				return dynSSWPAlg(ds5, source);
 	    	else if (is_adList2 && !ds->weighted)
 				return dynSSWPAlg(ds6, source);
-			else if (is_adListST && ds->weighted)
-                return dynSSWPAlg(ds7, source);
-			else if (is_adListST && !ds->weighted) 
-			    return dynSSWPAlg(ds8, source);
+			// else if (is_adListST && ds->weighted)
+            //     return dynSSWPAlg(ds7, source);
+			// else if (is_adListST && !ds->weighted) 
+			//     return dynSSWPAlg(ds8, source);
 		} else {
 	    	std::cout << "Error! Unrecognized Algorithm!" << std::endl;
 	    	exit(0);

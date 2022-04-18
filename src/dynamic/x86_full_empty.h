@@ -24,6 +24,7 @@ extern "C" {
 #include "stinger_atomics.h"
 
 #include  <stdint.h>
+#include <stdbool.h>
 #define MARKER INT64_MAX
 
 int64_t 

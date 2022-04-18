@@ -3,8 +3,8 @@
 #include <iostream>
 #include <fstream>
 
-#include "topAlg.h"
-#include "topDataStruc.h"
+#include "topAlg_cu.h"
+#include "topDataStruc_cu.h"
 #include "../common/timer.h"
 
 void* dequeAndInsertEdge(
@@ -36,6 +36,19 @@ void* dequeAndInsertEdge(
 	    std::cout << "Updated Batch: " << batch << std::endl;
 	    batch++;
 	    alg.performAlg();
+
+		// Write to file to compare results
+		// if(ds->num_edges == 234370166)
+		// {
+		// 	ofstream myfile;
+		// 	myfile.open("/home/tmathew/sfuhome/dataset/cudaMcDyn" + std::to_string(batch) + ".csv");
+		// 	for (int i=0; i < ds->property.size(); i++)
+		// 	{
+		// 		myfile << i << ", " << ds->property[i] << "\n";
+				
+		// 	}
+		// 	myfile.close();
+		// }
 	} else {		
 	    q_lock->unlock();		
 	    std::this_thread::sleep_for(std::chrono::milliseconds(1));		

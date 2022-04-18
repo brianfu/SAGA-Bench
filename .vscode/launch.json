@@ -1,0 +1,53 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "(gdb) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/frontEnd",
+            "args": [
+                "-d",
+                "0",
+                "-w",
+                "0",
+                "-f",
+                "/home/tmathew/sfuhome/dataset/com-amazon.ungraph.shuffle.t.w.csv",
+                "-b",
+                "50000",
+                "-s",
+                "adList",
+                "-n",
+                "334863",
+                "-a",
+                "bfsdyn",
+                "-t",
+                "16"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${fileDirname}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "CUDA C++: Launch",
+            "type": "cuda-gdb",
+            "request": "launch",
+            "gdb": "cuda-gdb",
+            "program": "${workspaceFolder}/frontEnd",
+            "args": "-d 0 -w 0 -f /home/tmathew/sfuhome/dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a bfsdyn -t 16"
+        }
+    ]
+}

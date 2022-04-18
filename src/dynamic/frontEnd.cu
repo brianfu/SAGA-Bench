@@ -6,7 +6,7 @@
 
 #include "builder.h"
 #include "fileReader.h"
-#include "topDataStruc.h"
+#include "topDataStruc_cu.h"
 #include "parser.h"
 
 /* Main thread that launches everything else */
