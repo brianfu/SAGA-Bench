@@ -2,17 +2,20 @@
 
 #
 
-This repository contains code, scripts, and user instructions related to the following [ISPASS 2020](https://ispass.org/ispass2020/) paper: 
+This repository orginally contained code, scripts, and user instructions related to the following [ISPASS 2020](https://ispass.org/ispass2020/) paper: 
 
 > **A. Basak, J. Lin, R. Lorica, X. Xie, Z. Chishti, A. Alameldeen, and Y. Xie, *SAGA-Bench: Software and Hardware Characterization of Streaming Graph Analytics Workloads***
 
 **SAGA-Bench** is a C++ benchmark for **S**tre**A**ming **G**raph **A**nalytics containing a collection of data structures and compute models on the same platform for a fair and systematic study. SAGA-Bench simultaneously provides 1) a common platform for performance analysis studies of software techniques and 2) a benchmark for architecture studies. SAGA-Bench implements runtime profiling, as well as hardware analysis via [Intel Processor Counter Monitor (PCM)](https://github.com/opcm/pcm).
+
+This version of **SAGA-Bench** has been modified to support some algorithms (BFS, PR and MC) using Adjacency List to run on CUDA.
 
 ## Components of SAGA-Bench
 Please refer to the paper for a detailed description of each component. 
 1. **Data Structures**: 
      + Adjacency List (shared style multithreading)
      + Adjacency List (chunked style multithreading)
+     + Adjacency List (CUDA)
      + Stinger 
      + Degree-Aware Hashing
 2. **Compute Models**:
@@ -30,9 +33,9 @@ Please refer to the paper for a detailed description of each component.
 1. **src/dynamic**: Core implementations of the benchmark. They include the following:
     + `frontEnd.cc` is the main/top file which reads command-line parameters, reads edge batches from the input file, initiates the data structure, and launches the scheduler thread. 
     + `builder.cc` contains the function `dequeAndInsertEdge()` which is executed by the scheduler thread. This function updates the data structure and performs an algorithm on it.
-    + *Data structures*: `abstract_data_struc.h` is the top-level abstract class for a data structure. Specific implementations are contained in files `adListShared.h`, `adListCunked.h`, `stinger.h/stinger.cc`, and `darhh.h`. Each file implements the specific fashion in which the *update* operation needs to be performed on the given data structure.
-    + *Graph Traversal*: `traversal.h` implements how each data structure needs to be traversed to get the in-neighbors and the out-neighbors. Traversal operation is achieved with two API functions: `in_neigh()` and `out_neigh()`. The specific traversal mechanism details of each data structure must be hidden under these two API functions. 
-    + *Compute Models and Algorithms*: `topAlg.h` is the top-level algorithm file where every algorithm is registered. The specific implementation of each algorithm is contained in a file starting with *dyn_* (e.g., `dyn_bfs.h`). Each file implements both the compute models for a specific algorithm. For example, `dyn_bfs.h` contains functions `dynBFSAlg()` for the *incremental* compute model and `BFSStartFromScratch()` for the *recomputation from scratch* compute model. Most of the *recomputation from scratch* implementations have been borrowed from [GAP Benchmark Suite](https://github.com/sbeamer/gapbs) with slight modifications to conform to the API of SAGA-Bench. 
+    + *Data structures*: `abstract_data_struc.h` is the top-level abstract class for a data structure. Specific implementations are contained in files `adListShared.h`, `adListCunked.h`, `stinger.h/stinger.cc`, and `darhh.h`. Each file implements the specific fashion in which the *update* operation needs to be performed on the given data structure. `adList_cu.h` is CUDA implementation based of `adList.h`, additional supporting functions are included in `adList_cu_support.h`.
+    + *Graph Traversal*: `traversal.h` implements how each data structure needs to be traversed to get the in-neighbors and the out-neighbors. Traversal operation is achieved with two API functions: `in_neigh()` and `out_neigh()`. The specific traversal mechanism details of each data structure must be hidden under these two API functions. However, graph traversal is not used in the case of CUDA.
+    + *Compute Models and Algorithms*: `topAlg.h` is the top-level algorithm file where every algorithm is registered. The specific implementation of each algorithm is contained in a file starting with *dyn_* (e.g., `dyn_pr.h`). Each file implements both the compute models for a specific algorithm. For example, `dyn_pr.h` contains functions `dynPRAlg()` for the *incremental* compute model and `PRStartFromScratch()` for the *recomputation from scratch* compute model. Most of the *recomputation from scratch* implementations have been borrowed from [GAP Benchmark Suite](https://github.com/sbeamer/gapbs) with slight modifications to conform to the API of SAGA-Bench. 
 2. **src/common**: Some utility elements borrowed from [GAP Benchmark Suite](https://github.com/sbeamer/gapbs).
 3. **inputResource**: Several resources to produce input dataset file formats (see below).
 4. **pcmResource**: Several resources to integrate [Intel PCM](https://github.com/opcm/pcm) with SAGA-Bench for hardware-level characterization (see below).
@@ -111,6 +114,7 @@ Similarly, to measure the memory bandwidth utilization details of the *compute* 
 These are some guidelines to include one's own data structure or compute model in SAGA-Bench. 
 1. *Including a new data structure*: Any new data structure must be inherited from the class `dataStruc` in `src/dynamic/abstract_data_struc.h`. The most important function to implement for a new data structure is `update()` which defines the mechanism to update a batch of edges into the data structure. Next, it is essential to implement the traversal mechanism of the data structure in the file `src/dynamic/traversal.h`.
 2. *Including a new compute model*: It is possible to introduce a new compute model for any algorithm (let's say BFS) by writing a new function in the algorithm's file (`src/dynamic/dyn_bfs.h` for BFS). For example, `src/dynamic/dyn_bfs.h` currently contains functions `dynBFSAlg()` and `BFSStartFromScratch()` for incremental and non-incremental compute models. Next, the new function much be registered in the class `Algorithm` in `src/dynamic/topAlg.h`.
+3. *CUDA Support*: Current modifications to support CUDA for Adjacency List takes away the extensibility features of SAGA-Bench.
 
-## Contact
-In case of issues, please contact Abanti at abasak@ucsb.edu. You could also raise an issue in Github so that the response can help other users. 
+## CUDA Specific Information
+This code has been tested by compiling using nvcc 11.5 and running on Nvidia GPU with compute capability 7.5. When testing, please make sure that at least those specifications are met. Currently, CUDA support exists only for Adjacency List, therefore please pass `adList` as the datastructure parameter to `frontend`
