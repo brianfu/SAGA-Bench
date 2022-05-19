@@ -15,7 +15,7 @@ Help(){
 }
 
 # Current GPU server we are running tests on
-# Make sure we can ssh in manually before attempting to SCP!
+# Make sure we can ssh in manually before attempting to SCP! (Requires SFU VPN)
 # https://www.sfu.ca/computing/about/support/covid-19-response--working-remotely/csil-linux-remote-access.html
 curr_user="fubof";
 curr_server="asb9700u-i03.csil.sfu.ca";
