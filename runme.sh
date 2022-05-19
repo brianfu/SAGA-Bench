@@ -1,8 +1,13 @@
 #dataDir=/home/abanti/datasets/SAGAdatasets/
 
 # Needed for remote run compatibility
-# workDir=$PWD # Local
-workDir="$HOME/runfiles" # Remote
+if [[ "$1" == "--remote" ]]; then
+  workDir="$HOME/runfiles"; # Remote
+  echo "Setting remote workDir: $workDir";
+else
+  workDir=$PWD; # Local
+  echo "Setting local workDir: $workDir";
+fi
 
 # Run LiveJournal 
 # $workDir/frontEnd -d 1 -w 0 -f ${dataDir}soc-LiveJournal1.shuffle.t.w.csv -b 500000 -s adListShared -n 4847571 -a bfsdyn -t 64 

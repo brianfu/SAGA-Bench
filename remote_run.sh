@@ -39,7 +39,7 @@ Copy_runfiles()
 
 Run_on_remote()
 {
-	ssh -p $curr_port $curr_user@$curr_server "$remote_dir/runme.sh";
+	ssh -p $curr_port $curr_user@$curr_server "$remote_dir/runme.sh --remote";
 }
 
 Get_from_remote()
