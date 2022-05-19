@@ -23,7 +23,7 @@ workDir="$HOME/runfiles" # Remote
 # $workDir/frontEnd -d 1 -w 1 -f $workDir/test.csv -b 10 -t 24 -s stinger -n 40 -a prdyn
 
 #Run test.csv on algorithm "traverse". "Traverse" is a single-threaded micro-kernel that reads the neighbors of all vertices in the graph
-# $workDir/frontEnd -d 1 -w 1 -f ./test.csv -b 10 -t 24 -s stinger -n 40 -a traverse
-
+# $workDir/frontEnd -d 1 -w 1 -f $workDir/test.csv -b 10 -t 24 -s stinger -n 40 -a traverse
 $workDir/frontEnd -d 1 -w 0 -f $workDir/test.csv -b 10 -t 24 -s adList -n 40 -a bfsdyn
+
 #topAlg_cu (adlist is shared for gpu (not imped for chunked))

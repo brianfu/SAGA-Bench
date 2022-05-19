@@ -16,6 +16,7 @@ Help(){
 
 # Current GPU server we are running tests on
 # Make sure we can ssh in manually before attempting to SCP! (Requires SFU VPN)
+# Shut down wsl2 via powershell (wsl --shutdown; wsl) if name resolution lagging
 # https://www.sfu.ca/computing/about/support/covid-19-response--working-remotely/csil-linux-remote-access.html
 curr_user="fubof";
 curr_server="asb9700u-i03.csil.sfu.ca";
@@ -44,6 +45,7 @@ Run_on_remote()
 Get_from_remote()
 {
 	scp -P $curr_port $curr_user@$curr_server:$remote_dir/Update.csv $PWD;
+	scp -P $curr_port $curr_user@$curr_server:$remote_dir/Alg.csv $PWD;
 }
 
 
@@ -57,6 +59,7 @@ Main(){
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 			-m | --make)
+				make clean;
 				make;
 				shift
 			;;
