@@ -47,7 +47,7 @@
             "request": "launch",
             "gdb": "cuda-gdb",
             "program": "${workspaceFolder}/frontEnd",
-            "args": "-d 0 -w 0 -f /home/tmathew/sfuhome/dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a bfsdyn -t 16"
+            "args": "-d 1 -w 0 -f ${workspaceFolder}/test.csv -b 10 -t 24 -s adList -n 40 -a bfsdyn"
         }
     ]
 }
