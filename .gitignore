@@ -36,6 +36,11 @@ frontEnd
 bin/*
 obj/*
 
+# VSCode
+.vscode
+!.vscode/launch.json
+
+
 # Project Output
 Alg.csv
 Update.csv
