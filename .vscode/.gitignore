@@ -1,0 +1,6 @@
+# Ignore All
+*
+
+# Whitelist
+!.gitignore
+!launch.json

@@ -36,10 +36,7 @@ frontEnd
 bin/*
 obj/*
 
-# VSCode
-.vscode
-!.vscode/launch.json
-
+# VSCode config .gitignore in .vscode
 
 # Project Output
 Alg.csv
