@@ -260,7 +260,7 @@ void dynBFSAlg(T* ds, NodeID source){
         for(NodeID i : ds->affectedNodesSet){
             ds->out_neighborsDelta[i].clear();  
         }
-        (ds->affectedNodes).clear();
+        (ds->affectedNodes).clear(); //parentheses around function?
         ds->affectedNodesSet.clear();
         
         gpuErrchk(cudaDeviceSynchronize());

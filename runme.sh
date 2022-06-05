@@ -1,13 +1,10 @@
 #dataDir=/home/abanti/datasets/SAGAdatasets/
 
-# Needed for remote run compatibility
-if [[ "$1" == "--remote" ]]; then
-  workDir="$HOME/runfiles"; # Remote
-  echo "Setting remote workDir: $workDir";
-else
-  workDir=$PWD; # Local
-  echo "Setting local workDir: $workDir";
-fi
+workDir=$PWD; # Local
+echo "Setting local workDir: $workDir";
+
+make clean
+make
 
 # Run LiveJournal 
 # $workDir/frontEnd -d 1 -w 0 -f ${dataDir}soc-LiveJournal1.shuffle.t.w.csv -b 500000 -s adListShared -n 4847571 -a bfsdyn -t 64 
@@ -29,6 +26,7 @@ fi
 
 #Run test.csv on algorithm "traverse". "Traverse" is a single-threaded micro-kernel that reads the neighbors of all vertices in the graph
 # $workDir/frontEnd -d 1 -w 1 -f $workDir/test.csv -b 10 -t 24 -s stinger -n 40 -a traverse
-$workDir/frontEnd -d 1 -w 0 -f $workDir/test.csv -b 10 -t 24 -s adList -n 40 -a bfsdyn
 
-#topAlg_cu (adlist is shared for gpu (not imped for chunked))
+
+# $workDir/frontEnd -d 1 -w 0 -f $workDir/test.csv -b 10 -t 24 -s adList -n 40 -a bfsdyn
+$workDir/frontEnd -d 0 -w 0 -f $workDir/dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a bfsdyn -t 16

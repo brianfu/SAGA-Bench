@@ -23,9 +23,9 @@ int main(int argc, char* argv[])
     std::mutex q_lock;
     
     EdgeBatchQueue queue;
-    bool loop = true;  
+    bool still_reading = true;  
     dataStruc* struc = createDataStruc(opts.type, opts.weighted, opts.directed, opts.num_nodes, opts.num_threads);    
-    std::thread t1(dequeAndInsertEdge, opts.type, struc, &queue, &q_lock, opts.algorithm, &loop);   
+    std::thread t1(dequeAndInsertEdge, opts.type, struc, &queue, &q_lock, opts.algorithm, &still_reading);   
     
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
@@ -59,12 +59,19 @@ int main(int argc, char* argv[])
     bool allEmpty = false;
     while (!allEmpty) {   
         q_lock.lock();
-	allEmpty = queue.empty();
-	q_lock.unlock();
-	sleep(20);
+        allEmpty = queue.empty();
+        q_lock.unlock();
+        sleep(20);
+
+        #ifdef DEBUG
+        //print state (entering/exiting function debug) of thread 1 and thread 0
+        //  -assert statement
+        //print thread id (printf)
+
+        #endif
     }
     
-    loop = false;
+    still_reading = false;
     t1.join();
     
     //cout << "Started printing queues " << endl;
