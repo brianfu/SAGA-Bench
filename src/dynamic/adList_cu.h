@@ -190,7 +190,8 @@ bool adList_cu<T>::vertexExists(const Edge& e, bool source)
 template <typename T>
 void adList_cu<T>::updateForNewVertex(const Edge& e, bool source)
 {
-    property.push_back(-1);      
+    property.push_back(-1);
+
     if (source || (!source && !directed)) {
         // update out_neighbors with meaningful data
         std::vector<T> edge_data;
@@ -249,8 +250,8 @@ void adList_cu<T>::updateForExistingVertex(const Edge& e, bool source)
         }
         if (!found) {
             T neighbor;
-            neighbor.setInfo(dest, e.weight);           
-            out_neighbors[index].push_back(neighbor); 
+            neighbor.setInfo(dest, e.weight);
+            out_neighbors[index].push_back(neighbor);
             out_neighborsDelta[index].push_back(neighbor);
         }           
     } else if (!source && directed) {

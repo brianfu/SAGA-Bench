@@ -6,6 +6,7 @@
 	],
 	"settings": {
 		"files.associations": {
+			"*.txt": "plaintext",
 			"chrono": "cpp",
 			"type_traits": "cpp",
 			"iostream": "cpp",
@@ -70,7 +71,12 @@
 			"iomanip": "cpp",
 			"cfenv": "cpp",
 			"typeindex": "cpp",
-			"variant": "cpp"
+			"variant": "cpp",
+			"compare": "cpp",
+			"concepts": "cpp",
+			"numbers": "cpp",
+			"semaphore": "cpp",
+			"stop_token": "cpp"
 		}
 	}
 }

@@ -16,46 +16,70 @@ void* dequeAndInsertEdge(
     bool *still_reading)
 {	
 	//std::cout << "Thread dequeAndInsertEdge: on CPU " << sched_getcpu() << "\n";
-    Algorithm alg(algorithm, ds, dtype);
-    int batch = 0;
-    EdgeList el;
-    q_lock->lock();
-    while (*still_reading || !q->empty()) {		
-	if (!q->empty()) {		
-	    el = q->front();
-	    q->pop();
-	    q_lock->unlock();
-		Timer t;
-		t.Start();
-		ds->update(el);	
-		
-		t.Stop();    
-        ofstream out("Update.csv", std::ios_base::app);   
-        out << t.Seconds() << std::endl;    
-        out.close();	
-	    std::cout << "Updated Batch: " << batch << std::endl;
-	    batch++;
-	    alg.performAlg();
+	LOG_PRINT("Spawning thread 1");
 
-		// Write to file to compare results
-		// if(ds->num_edges == 234370166)
-		// {
-		// 	ofstream myfile;
-		// 	myfile.open("/home/tmathew/sfuhome/dataset/cudaMcDyn" + std::to_string(batch) + ".csv");
-		// 	for (int i=0; i < ds->property.size(); i++)
-		// 	{
-		// 		myfile << i << ", " << ds->property[i] << "\n";
-				
-		// 	}
-		// 	myfile.close();
-		// }
-	} else {		
-	    q_lock->unlock();		
-	    std::this_thread::sleep_for(std::chrono::milliseconds(1));		
-	}
+	int batch = 0;
+	EdgeList el;
+	Algorithm alg(algorithm, ds, dtype);
+
+	LOG_PRINT("Thread 1: Taking lock");
 	q_lock->lock();
-    }
-    q_lock->unlock();
+
+	while (*still_reading || !q->empty()) {
+		if (!q->empty()) {
+			LOG_PRINT("Thread 1: Queue is not empty");
+
+			el = q->front();
+			LOG_PRINT("Thread 1: Popping Queue");
+			q->pop();
+
+			LOG_PRINT("Thread 1: Releasing lock");
+			q_lock->unlock();
+
+			// Update Phase
+			Timer t; t.Start();
+			LOG_PRINT("Thread 1: Performing Update Phase");
+			ds->update(el);	
+			t.Stop();
+
+			LOG_PRINT("Thread 1: Writing to Update.csv");
+			ofstream out("Update.csv", std::ios_base::app);   
+			out << t.Seconds() << std::endl;    
+			out.close();
+
+			std::cout << "Updated Batch: " << batch << std::endl;
+			batch++;
+
+			// Compute Phase
+			LOG_PRINT("Thread 1: Performing Compute Phase");
+			alg.performAlg();
+
+			// Write to file to compare results
+			// if(ds->num_edges == 234370166)
+			// {
+			// 	ofstream myfile;
+			// 	myfile.open("/home/tmathew/sfuhome/dataset/cudaMcDyn" + std::to_string(batch) + ".csv");
+			// 	for (int i=0; i < ds->property.size(); i++)
+			// 	{
+			// 		myfile << i << ", " << ds->property[i] << "\n";
+					
+			// 	}
+			// 	myfile.close();
+			// }
+		} 
+		else {
+			LOG_PRINT("Thread 1: Releasing lock");
+			q_lock->unlock();
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+
+		LOG_PRINT("Thread 1: Taking lock");
+		q_lock->lock();
+	}
+
+	LOG_PRINT("Thread 1: Releasing lock");
+	q_lock->unlock();
     
     // ##################### CORRECTNESS CHECK ############################
     // LJ: batch == 138
@@ -95,5 +119,6 @@ void* dequeAndInsertEdge(
 	out.close();
     }*/
 
-    return 0;
+	LOG_PRINT("Thread 1: Ready to join");
+  return 0;
 }

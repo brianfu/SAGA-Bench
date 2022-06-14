@@ -18,4 +18,11 @@ void printVecOfNodes(std::vector<NodeWeight> const& vec);
 void printVecOfVecOfNodes(std::vector<std::vector<Node>> const& v);
 void printVecOfVecOfNodes(std::vector<std::vector<NodeWeight>> const& v);
 
+#if defined(DEBUG)
+  #define LOG_PRINT(log_str) \
+    std::cout << log_str << std::endl
+#else
+  #define LOG_PRINT(log_str) 
+#endif
+
 #endif //FUNCTIONS_H_

@@ -89,19 +89,22 @@ struct Edge {
     int batch_id;
     bool sourceExists;
     bool destExists;
+
     Edge(NodeID s, NodeID d, Weight w, bool se, bool de):
-	source(s),
-	destination(d),
-	weight(w),
-	batch_id(-1),
-	sourceExists(se),
-	destExists(de) {}
+        source(s),
+        destination(d),
+        weight(w),
+        batch_id(-1),
+        sourceExists(se),
+        destExists(de) {}
+
     Edge(NodeID s, NodeID d, bool se, bool de): Edge(s, d, -1, se, de) {}
     Edge(NodeID s, NodeID d, Weight w): Edge(s, d, w, false, false) {}
     Edge(NodeID s, NodeID d): Edge(s, d, -1) {}
     Edge(){}
+
     Edge reverse() const {
-	return Edge(destination, source, weight, destExists, sourceExists);
+	    return Edge(destination, source, weight, destExists, sourceExists);
     }
 };
 

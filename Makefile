@@ -1,10 +1,12 @@
 # See LICENSE.txt for license details.
 
 C = nvcc
-CFLAGS = -g -G -Xcompiler -O2 -std=c++17 -w
+CFLAGS = -Xcompiler -O2 -std=c++17 -w -pg
+# CFLAGS = -g -G -Xcompiler -std=c++17 -w -D DEBUG=1 #For Debug
 
 CXX = nvcc
-CXXFLAGS = -g -G -Xcompiler -fopenmp -O2 -std=c++17 -w
+CXXFLAGS = -Xcompiler -fopenmp -O2 -std=c++17 -w -pg
+# CXXFLAGS = -g -G -Xcompiler -fopenmp -std=c++17 -w -D DEBUG=1 #For Debug
 
 DYN_PREFIX := d_
 
