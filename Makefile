@@ -1,10 +1,12 @@
 # See LICENSE.txt for license details.
 
 C = g++
-CFLAGS = -O2 -Wall -Wextra -std=c++11 -fpermissive
+# CFLAGS = -O2 -Wall -Wextra -std=c++11 -fpermissive #Standard
+CFLAGS = -O2 -Wall -Wextra -std=c++11 -fpermissive -pg #For profiling
 
 CXX = g++
-CXXFLAGS = -O2 -Wall -Wextra -pedantic -std=c++11 -fopenmp
+# CXXFLAGS = -O2 -Wall -Wextra -pedantic -std=c++11 -fopenmp #Standard
+CXXFLAGS = -O2 -Wall -Wextra -pedantic -std=c++11 -fopenmp -pg #For profiling
 
 DYN_PREFIX := d_
 

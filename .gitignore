@@ -31,6 +31,14 @@
 *.out
 *.app
 
+# Project binaries
 frontEnd
 bin/*
 obj/*
+
+# VSCode config .gitignore in .vscode
+
+# Project Output
+output
+Alg.csv
+Update.csv
