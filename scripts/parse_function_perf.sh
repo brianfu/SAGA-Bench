@@ -37,8 +37,7 @@ main () {
   # Separate by dataset, datastruct, alg, directed?, weighted?, batch, node_size
   # Data wanted (additional rows, graph in separate bar graphs): function total perf (incl. children), function self perf (in % time), total times func called
   cd $output_dir;
-
-  echo $PWD;
+  echo "Parsing from output dir: $PWD";
 
   mkdir -p function_perf;
   function_perf_dir=$PWD/function_perf;
