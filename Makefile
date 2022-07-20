@@ -1,10 +1,12 @@
 # See LICENSE.txt for license details.
 
 C = nvcc
-CFLAGS = -Xcompiler -O2 -std=c++17 -w -pg
+# CFLAGS = -Xcompiler -O2 -std=c++17 -w #Standard
+CFLAGS = -Xcompiler -O2 -std=c++17 -w -pg #For profiling
 # CFLAGS = -g -G -Xcompiler -std=c++17 -w -D DEBUG=1 #For Debug
 
 CXX = nvcc
+# CXXFLAGS = -Xcompiler -fopenmp -O2 -std=c++17 -w #Standard
 CXXFLAGS = -Xcompiler -fopenmp -O2 -std=c++17 -w -pg
 # CXXFLAGS = -g -G -Xcompiler -fopenmp -std=c++17 -w -D DEBUG=1 #For Debug
 

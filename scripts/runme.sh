@@ -1,7 +1,5 @@
+cd ..
 #dataDir=/home/abanti/datasets/SAGAdatasets/
-
-#make clean
-make
 
 # Run LiveJournal 
 # ./frontEnd -d 1 -w 0 -f ${dataDir}soc-LiveJournal1.shuffle.t.w.csv -b 500000 -s adListShared -n 4847571 -a bfsdyn -t 64 
@@ -32,7 +30,11 @@ make
 # Amazon
 ./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a bfsdyn &> output.out
 gprof frontEnd > profile.out
+gprof frontEnd | gprof2dot -s -w | dot -Tpng -o profile.png
+# gprof frontEnd -p -b | grep "assignLogicalID" > profile.out
+# gprof frontEnd -q -b | grep "assignLogicalID" > profile.out
+# gprof frontEnd | gprof2dot -s -w | grep "assignLogicalID"
 
-#./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a bfsfromscratch &> output.out
-#./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a prdyn &> output.out
-#./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a prfromscratch &> output.out
+# ./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a bfsfromscratch &> output.out
+# ./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a prdyn &> output.out
+# ./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a prfromscratch &> output.out

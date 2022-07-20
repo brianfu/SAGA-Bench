@@ -1,5 +1,6 @@
 #!/bin/bash
 # As precaution, clear OMP stuff and remove any alg or update csv files in the folder
+cd ..
 unset OMP_DISPLAY_ENV OMP_NUM_THREADS OMP_PROC_BIND OMP_PLACES
 rm Alg*.csv
 rm Update*.csv 
