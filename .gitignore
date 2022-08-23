@@ -35,10 +35,12 @@
 frontEnd
 bin/*
 obj/*
+asm/*
 
 # VSCode config .gitignore in .vscode
 
 # Project Output
-output
+output.out
+profile.*
 Alg.csv
 Update.csv

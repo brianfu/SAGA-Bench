@@ -23,10 +23,29 @@ cd ..
 #./frontEnd -d 1 -w 1 -f ./test.csv -b 10 -t 24 -s stinger -n 40 -a traverse
 
 # Amazon
-./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a bfsdyn &> output.out
+./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adListShared -n 334863 -a mcdyn &> output.out
 gprof frontEnd > profile.out
 gprof frontEnd | gprof2dot -s -w | dot -Tpng -o profile.png
 
 #./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a bfsfromscratch &> output.out
 #./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a prdyn &> output.out
 #./frontEnd -d 0 -w 0 -f ./dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a prfromscratch &> output.out
+
+### gem5
+# cd ../gem5;
+# > nohup.out;
+# scons build/X86/gem5.opt -j97
+
+# nohup build/X86/gem5.opt configs/example/se.py --cmd=../SAGA-Bench/frontEnd \
+# -o '-d 0 -w 0 -f ../SAGA-Bench/dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adList -n 334863 -a mcdyn' \
+# --cpu-type=TimingSimpleCPU --l1d_size=64kB --l1i_size=16kB --num-cpus 4 --caches --l2cache --output=output.out --errout=error.out;
+
+# nohup build/X86/gem5.opt configs/example/se.py --cmd=../SAGA-Bench/frontEnd \
+# -o '-d 0 -w 0 -f ../SAGA-Bench/dataset/com-amazon.ungraph.shuffle.t.w.csv -b 50000 -s adListShared -n 334863 -a bfsdyn' \
+# --fast-forward=1420000 --maxinsts=180000000 \
+# --cpu-type=TimingSimpleCPU --l1d_size=64kB --l1i_size=16kB --num-cpus 4 --caches --l2cache --output=output.out --errout=error.out;
+
+#Tried algs: bfsdyn, bfsfromscratch,
+#To try alg: prdyn, prfromscratch, ccdyn, ccfromscratch, mcdyn, mcfromscratch, ssspdyn, ssspfromscratch, sswpdyn, sswpfromscratch
+#Tried DS: 
+#DS: adListShared, adListChunked, stinger, degAwareRHH
